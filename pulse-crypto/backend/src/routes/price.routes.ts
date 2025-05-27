@@ -1,5 +1,10 @@
 import express from 'express';
-import { getCurrentPrice, getHistoricalPrices } from '../controllers/price.controller';
+import { 
+  getCurrentPrice, 
+  getHistoricalPrices, 
+  lockPrice, 
+  getLockedPrice 
+} from '../controllers/price.controller';
 
 const router = express.Router();
 
@@ -14,5 +19,11 @@ router.get('/current', asyncHandler(getCurrentPrice));
 
 // Route to get historical prices
 router.get('/historical', asyncHandler(getHistoricalPrices));
+
+// Route to lock a price for a bet
+router.post('/lock', asyncHandler(lockPrice));
+
+// Route to get a locked price
+router.get('/lock/:betId', asyncHandler(getLockedPrice));
 
 export default router;

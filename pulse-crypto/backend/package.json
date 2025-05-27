@@ -4,7 +4,7 @@
   "description": "Backend for Pulse Crypto Micro Prediction Game",
   "main": "dist/index.js",
   "scripts": {
-    "start": "node dist/index.js",
+    "start": "npm run build && node dist/index.js",
     "dev": "nodemon src/index.ts",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -20,18 +20,22 @@
   "license": "ISC",
   "dependencies": {
     "@pythnetwork/hermes-client": "^2.0.0",
+    "@solana/spl-token": "^0.4.13",
     "@solana/web3.js": "^1.98.2",
     "axios": "^1.9.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
+    "eventsource": "^4.0.0",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
     "mongoose": "^8.15.0",
     "morgan": "^1.10.0",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "ws": "^8.18.2"
   },
   "devDependencies": {
     "@types/cors": "^2.8.18",
+    "@types/eventsource": "^1.1.15",
     "@types/express": "^5.0.2",
     "@types/morgan": "^1.9.9",
     "@types/node": "^22.15.18",

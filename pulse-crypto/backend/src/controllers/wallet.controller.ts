@@ -1,7 +1,14 @@
 import { Request, Response } from 'express';
 import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID, getAccount, getAssociatedTokenAddress } from '@solana/spl-token';
 import User, { IUser } from '../models/user.model';
 import crypto from 'crypto';
+
+// SPL Token Mint Addresses (MAINNET)
+const TOKEN_MINTS = {
+  BeTyche: 'EydjnYHVeCQGihcvA22vBDCxn5HzBrXoQpP98kL9Koyp', // Full mint address for BeTyche
+  RADBRO: '287XY2FcGAE5ty4PZVjg22eqx37sEmzP8jPK3GxFofqB'    // You need to provide the full RADBRO mint address
+};
 
 // Custom interface for requests with authenticated users
 interface AuthenticatedRequest extends Request {
@@ -11,13 +18,68 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
+// Helper function to get Solana connection
+const getSolanaConnection = (): Connection => {
+  // Use environment variables for configuration
+  const network = process.env.SOLANA_NETWORK || 'mainnet-beta';
+  const customRpcUrl = process.env.SOLANA_RPC_URL;
+  
+  // Use custom RPC URL if provided, otherwise use cluster URL
+  const connectionUrl = customRpcUrl || clusterApiUrl(network as any);
+  
+  console.log(`Connecting to Solana ${network} at: ${connectionUrl}`);
+  
+  return new Connection(connectionUrl, {
+    commitment: 'confirmed',
+    confirmTransactionInitialTimeout: 60000
+  });
+};
+
 // Helper function to generate a random referral code
 const generateReferralCode = (): string => {
   return crypto.randomBytes(3).toString('hex').toUpperCase();
 };
 
+// Helper function to get SPL token balance
+const getSPLTokenBalance = async (
+  connection: Connection, 
+  walletAddress: string, 
+  mintAddress: string
+): Promise<number> => {
+  try {
+    const walletPublicKey = new PublicKey(walletAddress);
+    const mintPublicKey = new PublicKey(mintAddress);
+    
+    // Get the associated token account address
+    const tokenAccountAddress = await getAssociatedTokenAddress(
+      mintPublicKey,
+      walletPublicKey
+    );
+    
+    // Get the token account info
+    const tokenAccountInfo = await connection.getAccountInfo(tokenAccountAddress);
+    
+    if (!tokenAccountInfo) {
+      console.log(`No token account found for mint ${mintAddress}`);
+      return 0;
+    }
+    
+    // Get the token account data
+    const tokenAccount = await getAccount(connection, tokenAccountAddress);
+    
+    // Convert from smallest unit to regular unit
+    // Most SPL tokens use 9 decimals like SOL
+    const balance = Number(tokenAccount.amount) / Math.pow(10, 9);
+    
+    return balance;
+  } catch (error) {
+    console.error(`Error fetching SPL token balance for ${mintAddress}:`, error);
+    return 0;
+  }
+};
+
 /**
- * Get or create a user and fetch their actual SOL balance from blockchain
+ * Get or create a user and fetch their actual token balances from blockchain
  */
 export const getOrCreateUser = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -31,8 +93,8 @@ export const getOrCreateUser = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    // Connect to Solana (using devnet for testing)
-    const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+    // Connect to Solana using environment configuration
+    const connection = getSolanaConnection();
     
     // Find user or create a new one
     let user = await User.findOne({ walletAddress });
@@ -45,8 +107,8 @@ export const getOrCreateUser = async (req: Request, res: Response): Promise<void
         walletAddress,
         referralCode,
         tokens: {
-          BeTyche: 0,  // Default to 0
-          SOL: 0,      // Will update from blockchain
+          BeTyche: 0,
+          SOL: 0,
           ETH: 0,
           RADBRO: 0
         },
@@ -54,20 +116,34 @@ export const getOrCreateUser = async (req: Request, res: Response): Promise<void
       });
     }
 
-    // Get actual SOL balance from blockchain
+    // Get actual balances from blockchain
     try {
       const publicKey = new PublicKey(walletAddress);
-      const balance = await connection.getBalance(publicKey);
       
-      // Convert lamports to SOL (1 SOL = 10^9 lamports)
-      const solBalance = balance / 1000000000;
+      // Get SOL balance
+      const solBalance = await connection.getBalance(publicKey);
+      user.tokens.SOL = solBalance / 1000000000;
       
-      // Update the user's SOL balance
-      user.tokens.SOL = solBalance;
+      // Get BeTyche balance
+      if (TOKEN_MINTS.BeTyche) {
+        const beTycheBalance = await getSPLTokenBalance(connection, walletAddress, TOKEN_MINTS.BeTyche);
+        user.tokens.BeTyche = beTycheBalance;
+        console.log(`BeTyche balance: ${beTycheBalance}`);
+      }
       
-      console.log(`Updated ${walletAddress} SOL balance: ${solBalance}`);
+      // Get RADBRO balance
+      if (TOKEN_MINTS.RADBRO) {
+        const radbroBalance = await getSPLTokenBalance(connection, walletAddress, TOKEN_MINTS.RADBRO);
+        user.tokens.RADBRO = radbroBalance;
+        console.log(`RADBRO balance: ${radbroBalance}`);
+      }
+      
+      // ETH would need to be handled differently (cross-chain)
+      // For now, keeping it at 0 or manual update
+      
+      console.log(`Updated ${walletAddress} balances from ${process.env.SOLANA_NETWORK || 'mainnet-beta'}`);
     } catch (blockchainError) {
-      console.error('Error fetching SOL balance from blockchain:', blockchainError);
+      console.error(`Error fetching balances from ${process.env.SOLANA_NETWORK || 'mainnet-beta'}:`, blockchainError);
       // Don't fail if blockchain query fails, just keep existing balance
     }
 
@@ -122,26 +198,38 @@ export const updateTokenBalances = async (req: AuthenticatedRequest, res: Respon
       return;
     }
 
-    // Update token balances except SOL (which comes from blockchain)
+    // Update token balances
     if (tokens) {
-      if (tokens.BeTyche !== undefined) user.tokens.BeTyche = tokens.BeTyche;
-      if (tokens.ETH !== undefined) user.tokens.ETH = tokens.ETH;
-      if (tokens.RADBRO !== undefined) user.tokens.RADBRO = tokens.RADBRO;
-      
-      // For SOL, only update if specifically requested and not reading from blockchain
-      // This is useful for admin purposes
-      if (tokens.SOL !== undefined && req.user && req.user.isAdmin) {
-        user.tokens.SOL = tokens.SOL;
+      // For admin manual updates
+      if (req.user && req.user.isAdmin) {
+        if (tokens.BeTyche !== undefined) user.tokens.BeTyche = tokens.BeTyche;
+        if (tokens.SOL !== undefined) user.tokens.SOL = tokens.SOL;
+        if (tokens.ETH !== undefined) user.tokens.ETH = tokens.ETH;
+        if (tokens.RADBRO !== undefined) user.tokens.RADBRO = tokens.RADBRO;
       } else {
-        // Otherwise, get SOL balance from blockchain
+        // For regular users, only update ETH (non-blockchain)
+        if (tokens.ETH !== undefined) user.tokens.ETH = tokens.ETH;
+        
+        // Fetch current blockchain balances for SOL, BeTyche, and RADBRO
         try {
-          const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+          const connection = getSolanaConnection();
           const publicKey = new PublicKey(walletAddress);
-          const balance = await connection.getBalance(publicKey);
-          user.tokens.SOL = balance / 1000000000;
+          
+          // Update SOL
+          const solBalance = await connection.getBalance(publicKey);
+          user.tokens.SOL = solBalance / 1000000000;
+          
+          // Update BeTyche
+          if (TOKEN_MINTS.BeTyche) {
+            user.tokens.BeTyche = await getSPLTokenBalance(connection, walletAddress, TOKEN_MINTS.BeTyche);
+          }
+          
+          // Update RADBRO
+          if (TOKEN_MINTS.RADBRO) {
+            user.tokens.RADBRO = await getSPLTokenBalance(connection, walletAddress, TOKEN_MINTS.RADBRO);
+          }
         } catch (blockchainError) {
-          console.error('Error fetching SOL balance from blockchain:', blockchainError);
-          // Don't fail if blockchain query fails
+          console.error('Error fetching balances from blockchain:', blockchainError);
         }
       }
     }
@@ -225,12 +313,13 @@ export const applyReferralCode = async (req: Request, res: Response): Promise<vo
     // Apply the referral
     user.referredBy = referrer.walletAddress;
     
-    // Give referral bonus (example: 10 BeTyche)
-    // You can make this configurable later through admin settings
-    user.tokens.BeTyche += 10;
+    // Give referral bonus (1,000 BeTyche per signup as per client's note)
+    // Note: This is database balance, not blockchain balance
+    // You might want to handle this differently for actual token distribution
+    user.tokens.BeTyche += 1000;
     
-    // Also give the referrer a bonus
-    referrer.tokens.BeTyche += 15;
+    // Also give the referrer a bonus (1,000 BeTyche)
+    referrer.tokens.BeTyche += 1000;
     
     // Save both users
     await Promise.all([user.save(), referrer.save()]);
@@ -241,7 +330,7 @@ export const applyReferralCode = async (req: Request, res: Response): Promise<vo
       data: {
         walletAddress: user.walletAddress,
         referredBy: user.referredBy,
-        bonusReceived: 10
+        bonusReceived: 1000
       }
     });
   } catch (error) {

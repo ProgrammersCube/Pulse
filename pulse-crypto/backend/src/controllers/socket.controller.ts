@@ -10,6 +10,7 @@ export const setupSocketControllers = async (io: Server): Promise<void> => {
     const priceManager = getPriceManager();
     
     // Setup price update interval for all connected clients
+    // CHANGED FROM 300ms to 250ms for faster real-time updates
     const updateInterval = setInterval(() => {
       // Get latest price
       const btcPrice = priceManager.getLatestPrice('BTC');
@@ -20,7 +21,7 @@ export const setupSocketControllers = async (io: Server): Promise<void> => {
         price: btcPrice.price,
         timestamp: btcPrice.timestamp
       });
-    }, 300); // Update every 300ms
+    }, 250); // Update every 250ms for real-time feel
     
     // Setup socket connections
     io.on('connection', (socket) => {

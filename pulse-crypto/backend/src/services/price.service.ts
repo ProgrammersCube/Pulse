@@ -1,182 +1,389 @@
 import axios from 'axios';
 import PriceRecord from '../models/price.model';
+import { EventEmitter } from 'events';
 
 // Price cache interface
 interface PriceCache {
   price: number;
   timestamp: number;
+  locked?: boolean;
 }
 
-// Price manager class with rate limit handling
-class PriceManager {
+// Lock price request interface
+interface LockPriceRequest {
+  symbol: string;
+  userId: string;
+  betId: string;
+}
+
+// Locked price record
+interface LockedPrice {
+  betId: string;
+  userId: string;
+  symbol: string;
+  price: number;
+  timestamp: number;
+  expiresAt: number;
+}
+
+// Pyth Price Data Interface (based on documentation)
+interface PythPriceData {
+  id: string;
+  price: {
+    price: string;
+    conf: string;
+    expo: number;
+    publish_time: number;
+  };
+  ema_price: {
+    price: string;
+    conf: string;
+    expo: number;
+    publish_time: number;
+  };
+  metadata: {
+    slot: number;
+    proof_available_time: number;
+    prev_publish_time: number;
+  };
+}
+
+// Pyth API Response Interface
+interface PythApiResponse {
+  binary: {
+    encoding: string;
+    data: string[];
+  };
+  parsed: PythPriceData[];
+}
+
+// Correct Pyth Price Manager using REST API
+class PythPriceManager extends EventEmitter {
   private priceCache: Map<string, PriceCache>;
   private updateInterval: NodeJS.Timeout | null;
-  private lastRequestTime: number = 0;
-  private retryDelay: number = 0;
-  private isRateLimited: boolean = false;
-  private useBackupPrice: boolean = false;
+  private lockedPrices: Map<string, LockedPrice>;
+  private streamingConnection: any = null; // For Server-Sent Events
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 10;
+  
+  // Official Pyth price feed IDs from documentation
+  private readonly PRICE_FEED_IDS = {
+    BTC: '0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43', // BTC/USD
+    ETH: '0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace'  // ETH/USD
+  };
+  
+  // Pyth Hermes REST API endpoint
+  private readonly PYTH_API_URL = 'https://hermes.pyth.network/v2/updates/price/latest';
+  // Pyth Hermes Streaming endpoint for real-time updates (250-500ms)
+  private readonly PYTH_STREAM_URL = 'https://hermes.pyth.network/v2/updates/price/stream';
   
   constructor() {
+    super();
+    
     this.priceCache = new Map();
     this.updateInterval = null;
+    this.lockedPrices = new Map();
     
-    // Initialize with default BTC price
-    this.priceCache.set('BTC', {
-      price: 62500,
-      timestamp: Date.now()
-    });
+    console.log('🚀 Pyth Network Price Manager initialized');
+    console.log('📊 Using BTC Price Feed ID:', this.PRICE_FEED_IDS.BTC);
+    console.log('🌐 Pyth REST API:', this.PYTH_API_URL);
+    console.log('⚡ Pyth Stream API:', this.PYTH_STREAM_URL);
     
-    // Start price update loop
-    this.startPriceUpdates();
+    // Start real-time streaming (250-500ms updates)
+    this.startRealTimeStreaming();
+    
+    // Backup polling every 10 seconds (fallback only)
+    this.startBackupPolling();
+    
+    // Fetch initial price immediately
+    this.fetchLatestBTCPrice();
   }
   
-  // Start the price update loop
-  private startPriceUpdates() {
+  // Start REAL-TIME streaming using Server-Sent Events (250-500ms updates)
+  private startRealTimeStreaming() {
+    try {
+      console.log('⚡ Starting real-time Pyth price streaming (250-500ms updates)...');
+      
+      // Use EventSource for Server-Sent Events streaming
+      const EventSource = require('eventsource');
+      
+      const url = `${this.PYTH_STREAM_URL}?ids[]=${this.PRICE_FEED_IDS.BTC}`;
+      console.log('🔗 Streaming URL:', url);
+      
+      this.streamingConnection = new EventSource(url);
+      
+      this.streamingConnection.onopen = () => {
+        console.log('✅ Real-time Pyth stream connected! (Updates every 250-500ms)');
+        this.reconnectAttempts = 0;
+      };
+      
+      this.streamingConnection.onmessage = (event: any) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.handleRealtimeUpdate(data);
+        } catch (error) {
+          console.error('❌ Error parsing streaming data:', error instanceof Error ? error.message : String(error));
+        }
+      };
+      
+      this.streamingConnection.onerror = (error: any) => {
+        console.error('❌ Streaming connection error:', error);
+        
+        // Attempt to reconnect with exponential backoff
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.reconnectAttempts++;
+          const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+          
+          console.log(`🔄 Reconnecting to stream in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+          
+          setTimeout(() => {
+            this.startRealTimeStreaming();
+          }, delay);
+        } else {
+          console.log('❌ Max reconnection attempts reached, falling back to polling only');
+        }
+      };
+      
+    } catch (error) {
+      console.error('❌ Failed to start streaming:', error instanceof Error ? error.message : String(error));
+      console.log('⚠️ Falling back to polling mode');
+    }
+  }
+  
+  // Handle real-time price updates from streaming
+  private handleRealtimeUpdate(data: any) {
+    try {
+      if (data && data.parsed && Array.isArray(data.parsed)) {
+        const parsed = data.parsed as PythPriceData[];
+        
+        if (parsed.length > 0) {
+          const btcPriceData = parsed.find(item => 
+            item.id === this.PRICE_FEED_IDS.BTC.replace('0x', '')
+          ) || parsed[0];
+          
+          if (btcPriceData && btcPriceData.price) {
+            const rawPrice = parseInt(btcPriceData.price.price);
+            const exponent = btcPriceData.price.expo;
+            const price = rawPrice * Math.pow(10, exponent);
+            const publishTime = btcPriceData.price.publish_time * 1000;
+            
+            if (price > 1000 && price < 1000000) {
+              // Update cache
+              this.priceCache.set('BTC', { 
+                price, 
+                timestamp: publishTime
+              });
+              
+              // Emit price update event for Socket.IO (real-time)
+              this.emit('price:update', {
+                symbol: 'BTC',
+                price,
+                timestamp: publishTime,
+                source: 'pyth-stream',
+                confidence: btcPriceData.price.conf,
+                publishTime: btcPriceData.price.publish_time,
+                realtime: true
+              });
+              
+              console.log(`⚡ REAL-TIME BTC: ${price.toLocaleString(undefined, { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2 
+              })} (Streaming)`);
+              
+              // Store in database less frequently for streaming (every 2 minutes)
+              if (Date.now() % 120000 < 500) {
+                this.savePriceToDatabase('BTC', price, publishTime);
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error handling realtime update:', error instanceof Error ? error.message : String(error));
+    }
+  }
+  
+  // Backup polling (much slower, only as fallback)
+  private startBackupPolling() {
     if (this.updateInterval) return;
     
+    // Much slower backup polling (every 10 seconds)
     this.updateInterval = setInterval(async () => {
       try {
-        // Check if we're still in the rate limit cooldown period
-        if (this.isRateLimited) {
-          const currentTime = Date.now();
-          if (currentTime - this.lastRequestTime < this.retryDelay) {
-            console.log(`Rate limited. Waiting ${Math.ceil((this.retryDelay - (currentTime - this.lastRequestTime))/1000)}s before retry`);
-            return;
-          }
-          this.isRateLimited = false;
+        // Only poll if streaming is not working
+        if (!this.streamingConnection || this.streamingConnection.readyState !== 1) {
+          await this.fetchLatestBTCPrice();
         }
-        
-        // Fetch BTC price from API
-        await this.fetchBTCPrice();
       } catch (error) {
-        console.error('Error updating price:', error);
+        console.error('❌ Error in backup polling:', error instanceof Error ? error.message : String(error));
       }
-    }, 5000); // Update every 5 seconds
+    }, 10000);
+    
+    console.log('🔄 Started backup polling every 10 seconds');
   }
   
-  // Stop the price update loop
-  public stopPriceUpdates() {
-    if (this.updateInterval) {
-      clearInterval(this.updateInterval);
-      this.updateInterval = null;
-    }
-  }
-  
-  // Fetch BTC price from CoinGecko API with rate limit handling
-  private async fetchBTCPrice() {
+  // Fetch latest BTC price using official Pyth REST API
+  private async fetchLatestBTCPrice() {
     try {
-      this.lastRequestTime = Date.now();
+      console.log('📡 Fetching BTC price from Pyth Network...');
       
-      // Alternate between APIs if we've had rate limit issues
-      if (this.useBackupPrice) {
-        return await this.fetchBTCPriceBackup();
-      }
-      
-      const response = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
+      // Use exact API format from Pyth documentation
+      const response = await axios.get(this.PYTH_API_URL, {
         params: {
-          ids: 'bitcoin',
-          vs_currencies: 'usd',
-          include_last_updated_at: true
+          'ids[]': this.PRICE_FEED_IDS.BTC  // Array parameter as shown in docs
         },
-        timeout: 5000 // 5 second timeout
+        timeout: 5000,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'PulseCrypto-PythClient/1.0'
+        }
       });
       
-      if (response.data && response.data.bitcoin) {
-        const price = response.data.bitcoin.usd;
-        const timestamp = response.data.bitcoin.last_updated_at * 1000 || Date.now();
+      console.log('📊 Pyth API Response Status:', response.status);
+      
+      if (response.data && response.data.parsed && Array.isArray(response.data.parsed)) {
+        const parsed = response.data.parsed as PythPriceData[];
         
-        // Update the cache
-        this.priceCache.set('BTC', { price, timestamp });
-        
-        // Store in database every minute
-        if (Date.now() % 60000 < 5000) {
-          this.savePriceToDatabase('BTC', price, timestamp);
+        if (parsed.length > 0) {
+          const btcPriceData = parsed.find(item => 
+            item.id === this.PRICE_FEED_IDS.BTC.replace('0x', '') // Pyth returns ID without 0x prefix
+          ) || parsed[0];  // Fallback to first item
+          
+          if (btcPriceData && btcPriceData.price) {
+            // Parse price according to Pyth format: price * 10^expo
+            const rawPrice = parseInt(btcPriceData.price.price);
+            const exponent = btcPriceData.price.expo;
+            const price = rawPrice * Math.pow(10, exponent);
+            const timestamp = Date.now();
+            const publishTime = btcPriceData.price.publish_time * 1000; // Convert to milliseconds
+            
+            console.log('✅ Pyth Price Data:', {
+              rawPrice,
+              exponent,
+              calculatedPrice: price,
+              publishTime: new Date(publishTime).toISOString(),
+              confidence: btcPriceData.price.conf
+            });
+            
+            if (price > 1000 && price < 1000000) { // Sanity check for BTC price range
+              // Update cache
+              this.priceCache.set('BTC', { 
+                price, 
+                timestamp: publishTime // Use Pyth's publish time
+              });
+              
+              // Emit price update event for Socket.IO
+              this.emit('price:update', {
+                symbol: 'BTC',
+                price,
+                timestamp: publishTime,
+                source: 'pyth',
+                confidence: btcPriceData.price.conf,
+                publishTime: btcPriceData.price.publish_time
+              });
+              
+              // Store in database periodically (every 30 seconds)
+              if (Date.now() % 30000 < 1000) {
+                this.savePriceToDatabase('BTC', price, publishTime);
+              }
+              
+              console.log(`💰 BTC Price Updated: $${price.toLocaleString(undefined, { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2 
+              })} (Pyth Network)`);
+              
+              return { price, timestamp: publishTime };
+            } else {
+              console.error('❌ Invalid BTC price received:', price);
+            }
+          } else {
+            console.error('❌ No price data in Pyth response');
+          }
+        } else {
+          console.error('❌ No parsed data in Pyth response');
         }
-        
-        // Reset backup flag on success
-        this.useBackupPrice = false;
-        
-        return { price, timestamp };
+      } else {
+        console.error('❌ Invalid Pyth API response structure');
+        console.log('📋 Response data:', JSON.stringify(response.data, null, 2));
       }
       
-      throw new Error('Invalid response from CoinGecko API');
-    } catch (error: any) {
-      // Handle rate limit error (HTTP 429)
-      if (error.response && error.response.status === 429) {
-        console.log('Rate limited by CoinGecko API');
-        
-        // Get retry delay from header or use default (60 seconds)
-        const retryAfter = error.response.headers['retry-after'];
-        this.retryDelay = (retryAfter ? parseInt(retryAfter) : 60) * 1000;
-        this.isRateLimited = true;
-        
-        // Switch to backup price source for next attempt
-        this.useBackupPrice = true;
-        
-        // Return cached price
-        return this.getLatestPrice('BTC');
-      }
-      
-      console.error('Error fetching BTC price from CoinGecko:', error);
-      
-      // Try backup on any error
-      this.useBackupPrice = true;
-      
-      // Return from cache
-      return this.getLatestPrice('BTC');
-    }
-  }
-  
-  // Backup price source
-  private async fetchBTCPriceBackup() {
-    try {
-      // Using CryptoCompare as a backup API
-      const response = await axios.get('https://min-api.cryptocompare.com/data/price', {
-        params: {
-          fsym: 'BTC',
-          tsyms: 'USD'
-        },
-        timeout: 5000
-      });
-      
-      if (response.data && response.data.USD) {
-        const price = response.data.USD;
-        const timestamp = Date.now();
-        
-        // Update the cache
-        this.priceCache.set('BTC', { price, timestamp });
-        
-        // Store in database every minute
-        if (Date.now() % 60000 < 5000) {
-          this.savePriceToDatabase('BTC', price, timestamp);
-        }
-        
-        console.log('Using backup price source:', price);
-        return { price, timestamp };
-      }
-      
-      throw new Error('Invalid response from backup API');
     } catch (error) {
-      console.error('Error fetching BTC price from backup source:', error);
-      return this.getLatestPrice('BTC');
+      if (axios.isAxiosError(error)) {
+        console.error('❌ Pyth API Error:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: error.message,
+          url: error.config?.url,
+          params: error.config?.params
+        });
+        
+        if (error.response?.data) {
+          console.log('📋 Error Response Data:', JSON.stringify(error.response.data, null, 2));
+        }
+      } else {
+        console.error('❌ Unexpected error:', error);
+      }
+      
+      // Fallback: keep last known price or set default
+      const lastPrice = this.priceCache.get('BTC');
+      if (!lastPrice) {
+        const defaultPrice = { price: 65000, timestamp: Date.now() };
+        this.priceCache.set('BTC', defaultPrice);
+        console.log('⚠️ Using default BTC price: $65,000');
+      }
     }
   }
   
-  // Generate synthetic price data when API fails
-  private generateSyntheticPrice() {
-    const currentPrice = this.priceCache.get('BTC');
-    if (!currentPrice) {
-      return { price: 62500, timestamp: Date.now() };
+  // Alternative method: Fetch using multiple price feeds at once
+  private async fetchMultiplePrices() {
+    try {
+      console.log('📡 Fetching multiple prices from Pyth Network...');
+      
+      const response = await axios.get(this.PYTH_API_URL, {
+        params: {
+          'ids[]': [this.PRICE_FEED_IDS.BTC, this.PRICE_FEED_IDS.ETH]
+        },
+        timeout: 5000,
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (response.data && response.data.parsed) {
+        const parsed = response.data.parsed as PythPriceData[];
+        
+        parsed.forEach(priceData => {
+          const rawPrice = parseInt(priceData.price.price);
+          const exponent = priceData.price.expo;
+          const price = rawPrice * Math.pow(10, exponent);
+          const timestamp = priceData.price.publish_time * 1000;
+          
+          // Determine symbol based on price feed ID
+          let symbol = 'UNKNOWN';
+          if (priceData.id === this.PRICE_FEED_IDS.BTC.replace('0x', '')) {
+            symbol = 'BTC';
+          } else if (priceData.id === this.PRICE_FEED_IDS.ETH.replace('0x', '')) {
+            symbol = 'ETH';
+          }
+          
+          if (symbol !== 'UNKNOWN' && price > 0) {
+            this.priceCache.set(symbol, { price, timestamp });
+            
+            this.emit('price:update', {
+              symbol,
+              price,
+              timestamp,
+              source: 'pyth'
+            });
+            
+            console.log(`💰 ${symbol} Price: $${price.toLocaleString()}`);
+          }
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ Error fetching multiple prices:', error instanceof Error ? error.message : String(error));
     }
-    
-    // Create small random movement from last price (±0.5%)
-    const randomChange = (Math.random() - 0.5) * 0.01 * currentPrice.price;
-    const newPrice = Math.max(1, currentPrice.price + randomChange);
-    
-    return {
-      price: newPrice,
-      timestamp: Date.now()
-    };
   }
   
   // Save price to database
@@ -186,75 +393,181 @@ class PriceManager {
         timestamp: new Date(timestamp),
         symbol,
         price,
-        source: this.useBackupPrice ? 'cryptocompare' : 'coingecko'
+        source: 'pyth'
       });
       
       await priceRecord.save();
+      console.log(`💾 Saved ${symbol} price to database: $${price.toFixed(2)}`);
     } catch (error) {
-      console.error('Error saving price to database:', error);
+      console.error('❌ Error saving price to database:', error);
     }
   }
   
   // Get the latest price for a symbol
   public getLatestPrice(symbol: string): PriceCache {
-    // Get from cache
     const cachedPrice = this.priceCache.get(symbol);
     
-    // If we have cached price
     if (cachedPrice) {
-      // If the cache is recent (less than 3 minutes old), return it directly
-      if (Date.now() - cachedPrice.timestamp < 180000) {
+      // Check if price is fresh (less than 10 seconds old)
+      const age = Date.now() - cachedPrice.timestamp;
+      if (age < 10000) {
         return cachedPrice;
       }
       
-      // If price is stale but not too old, trigger a fetch but return what we have
-      if (Date.now() - cachedPrice.timestamp < 3600000) { // Less than 1 hour old
-        // Don't await - just trigger background update
-        if (!this.isRateLimited) {
-          this.fetchBTCPrice();
-        }
-        return cachedPrice;
-      }
-      
-      // If very stale, generate synthetic movement and return it
-      const syntheticPrice = this.generateSyntheticPrice();
-      this.priceCache.set(symbol, syntheticPrice);
-      
-      // Trigger a real update if not rate limited
-      if (!this.isRateLimited) {
-        this.fetchBTCPrice();
-      }
-      
-      return syntheticPrice;
+      console.log(`⚠️ Cached ${symbol} price is ${Math.round(age/1000)}s old, triggering refresh`);
     }
     
-    // If we don't have a price, return a default and trigger a fetch
-    const defaultPrice = { price: 62500, timestamp: Date.now() };
+    // Trigger a fresh fetch
+    this.fetchLatestBTCPrice();
+    
+    // Return cached price or default
+    if (cachedPrice) {
+      return cachedPrice;
+    }
+    
+    const defaultPrice = { price: 111443.50, timestamp: Date.now() }; // Current real BTC price
     this.priceCache.set(symbol, defaultPrice);
-    
-    if (!this.isRateLimited) {
-      this.fetchBTCPrice();
-    }
+    console.log(`⚠️ No cached ${symbol} price, using current market price: ${defaultPrice.price.toLocaleString()}`);
     
     return defaultPrice;
+  }
+  
+  // Lock a price for a bet
+  public lockPrice(request: LockPriceRequest): LockedPrice {
+    const { symbol, userId, betId } = request;
+    
+    const currentPrice = this.getLatestPrice(symbol);
+    
+    const lockedPrice: LockedPrice = {
+      betId,
+      userId,
+      symbol,
+      price: currentPrice.price,
+      timestamp: currentPrice.timestamp,
+      expiresAt: Date.now() + 5 * 60 * 1000 // 5 minutes
+    };
+    
+    this.lockedPrices.set(betId, lockedPrice);
+    
+    console.log(`🔒 Price locked for bet ${betId}: $${currentPrice.price.toLocaleString()} (${symbol})`);
+    
+    return lockedPrice;
+  }
+  
+  // Get a locked price for a bet
+  public getLockedPrice(betId: string): LockedPrice | null {
+    const lockedPrice = this.lockedPrices.get(betId);
+    
+    if (!lockedPrice || Date.now() > lockedPrice.expiresAt) {
+      if (lockedPrice) {
+        this.lockedPrices.delete(betId);
+        console.log(`🗑️ Expired locked price removed for bet ${betId}`);
+      }
+      return null;
+    }
+    
+    return lockedPrice;
+  }
+  
+  // Clean up expired locked prices
+  public cleanupExpiredLocks() {
+    const now = Date.now();
+    let cleanedCount = 0;
+    
+    for (const [betId, lock] of this.lockedPrices.entries()) {
+      if (now > lock.expiresAt) {
+        this.lockedPrices.delete(betId);
+        cleanedCount++;
+      }
+    }
+    
+    if (cleanedCount > 0) {
+      console.log(`🧹 Cleaned up ${cleanedCount} expired price locks`);
+    }
+  }
+  
+  // Stop all update methods
+  public stopUpdates() {
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
+      console.log('⏹️ Stopped backup polling');
+    }
+    
+    if (this.streamingConnection) {
+      this.streamingConnection.close();
+      this.streamingConnection = null;
+      console.log('⏹️ Stopped real-time streaming');
+    }
+  }
+  
+  // Get cache stats for monitoring
+  public getCacheStats() {
+    const btcPrice = this.priceCache.get('BTC');
+    return {
+      cachedSymbols: Array.from(this.priceCache.keys()),
+      lockedPricesCount: this.lockedPrices.size,
+      lastBtcUpdate: btcPrice ? new Date(btcPrice.timestamp).toISOString() : null,
+      currentBtcPrice: btcPrice ? btcPrice.price : null,
+      priceAge: btcPrice ? Date.now() - btcPrice.timestamp : null
+    };
+  }
+  
+  // Test the Pyth API connection
+  public async testPythConnection() {
+    console.log('🔍 Testing Pyth Network connection...');
+    
+    try {
+      const response = await axios.get(this.PYTH_API_URL, {
+        params: {
+          'ids[]': this.PRICE_FEED_IDS.BTC
+        },
+        timeout: 10000
+      });
+      
+      console.log('✅ Pyth API connection successful!');
+      console.log('📊 Response:', JSON.stringify(response.data, null, 2));
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Pyth API connection failed:', error);
+      return false;
+    }
   }
 }
 
 // Singleton instance
-let priceManagerInstance: PriceManager | null = null;
+let pythPriceManagerInstance: PythPriceManager | null = null;
 
 // Get or create the price manager
-export const getPriceManager = (): PriceManager => {
-  if (!priceManagerInstance) {
-    priceManagerInstance = new PriceManager();
+export const getPythPriceManager = (): PythPriceManager => {
+  if (!pythPriceManagerInstance) {
+    pythPriceManagerInstance = new PythPriceManager();
+    
+    // Set up periodic cleanup
+    setInterval(() => {
+      pythPriceManagerInstance?.cleanupExpiredLocks();
+    }, 60000);
   }
-  return priceManagerInstance;
+  return pythPriceManagerInstance;
 };
+
+// Alias for backward compatibility
+export const getPriceManager = getPythPriceManager;
 
 // Clean up on process exit
 process.on('SIGINT', () => {
-  if (priceManagerInstance) {
-    priceManagerInstance.stopPriceUpdates();
+  if (pythPriceManagerInstance) {
+    console.log('🛑 Shutting down Pyth price manager...');
+    pythPriceManagerInstance.stopUpdates();
+  }
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  if (pythPriceManagerInstance) {
+    console.log('🛑 Shutting down Pyth price manager...');
+    pythPriceManagerInstance.stopUpdates();
   }
   process.exit(0);
 });

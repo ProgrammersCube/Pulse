@@ -31,6 +31,8 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
+    "build:production": "REACT_APP_API_URL=https://api.thepulse.bet REACT_APP_SOCKET_URL=https://api.thepulse.bet react-scripts build",
+    "build:production:windows": "set REACT_APP_API_URL=https://api.thepulse.bet&& set REACT_APP_SOCKET_URL=https://api.thepulse.bet&& react-scripts build",
     "test": "craco test",
     "eject": "react-scripts eject"
   },

@@ -1,11 +1,11 @@
 import { Request, Response } from 'express';
 import PriceRecord from '../models/price.model';
-import { getPriceManager } from '../services/price.service';
+import { getPythPriceManager } from '../services/price.service'; // Updated import
 
 // Get current BTC price
 export const getCurrentPrice = async (req: Request, res: Response) => {
   try {
-    const priceManager = getPriceManager();
+    const priceManager = getPythPriceManager(); // Updated function name
     const btcPrice = priceManager.getLatestPrice('BTC');
     
     return res.status(200).json({
@@ -72,6 +72,71 @@ export const getHistoricalPrices = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error in getHistoricalPrices:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: (error as Error).message
+    });
+  }
+};
+
+// Lock price for a bet
+export const lockPrice = async (req: Request, res: Response) => {
+  try {
+    const { symbol, userId, betId } = req.body;
+    
+    if (!symbol || !userId || !betId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Symbol, userId, and betId are required'
+      });
+    }
+    
+    const priceManager = getPythPriceManager(); // Updated function name
+    const lockedPrice = priceManager.lockPrice({ symbol, userId, betId });
+    
+    return res.status(200).json({
+      success: true,
+      data: lockedPrice
+    });
+  } catch (error) {
+    console.error('Error in lockPrice:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: (error as Error).message
+    });
+  }
+};
+
+// Get locked price for a bet
+export const getLockedPrice = async (req: Request, res: Response) => {
+  try {
+    const { betId } = req.params;
+    
+    if (!betId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Bet ID is required'
+      });
+    }
+    
+    const priceManager = getPythPriceManager(); // Updated function name
+    const lockedPrice = priceManager.getLockedPrice(betId);
+    
+    if (!lockedPrice) {
+      return res.status(404).json({
+        success: false,
+        message: 'Locked price not found or expired'
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      data: lockedPrice
+    });
+  } catch (error) {
+    console.error('Error in getLockedPrice:', error);
     return res.status(500).json({
       success: false,
       message: 'Server error',
