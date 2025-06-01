@@ -10,6 +10,7 @@ import { Server as SocketServer } from 'socket.io';
 // Import routes
 import walletRoutes from './routes/wallet.routes';
 import priceRoutes from './routes/price.routes';
+import gameRoutes from './routes/game.routes';
 
 // Import socket controller
 import { setupSocketControllers } from './controllers/socket.controller';
@@ -57,6 +58,7 @@ app.use(morgan('dev'));
 // Routes
 app.use('/api/wallet', walletRoutes);
 app.use('/api/price', priceRoutes);
+app.use('/api/game', gameRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

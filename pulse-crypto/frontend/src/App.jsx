@@ -9,6 +9,8 @@ import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import io from 'socket.io-client';
 import { debounce } from 'lodash';
+import gameService from './services/game.service';
+
 
 // Import Solana wallet adapter styles
 import '@solana/wallet-adapter-react-ui/styles.css';
@@ -933,6 +935,1018 @@ const Footer = () => {
     </footer>
   );
 };
+
+const GameSetupScreen = () => {
+  const navigate = useNavigate();
+  const { connected, publicKey } = useWallet();
+  const { user, btcPrice, socket } = useAppContext();
+  
+  // Game state
+  const [selectedDirection, setSelectedDirection] = useState(null);
+  const [selectedToken, setSelectedToken] = useState('BeTyche');
+  const [betAmount, setBetAmount] = useState('');
+  const [duration, setDuration] = useState(30); // Default 30 seconds
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [isCreatingBet, setIsCreatingBet] = useState(false);
+  const [error, setError] = useState('');
+  
+  // Token limits
+  const tokenLimits = {
+    BeTyche: { min: 100, max: 1000000 },
+    SOL: { min: 0.01, max: 100 },
+    ETH: { min: 0.001, max: 10 },
+    RADBRO: { min: 1000, max: 10000000 }
+  };
+  
+  useEffect(() => {
+    if (!connected || !publicKey) {
+      navigate('/');
+    }
+  }, [connected, publicKey, navigate]);
+  
+  const handleDirectionSelect = (direction) => {
+    setSelectedDirection(direction);
+    setError('');
+  };
+  
+  const validateBet = () => {
+    if (!selectedDirection) {
+      setError('Please select UP or DOWN');
+      return false;
+    }
+    
+    const amount = parseFloat(betAmount);
+    if (isNaN(amount) || amount <= 0) {
+      setError('Please enter a valid bet amount');
+      return false;
+    }
+    
+    const limits = tokenLimits[selectedToken];
+    if (amount < limits.min) {
+      setError(`Minimum bet for ${selectedToken} is ${limits.min}`);
+      return false;
+    }
+    
+    if (amount > limits.max) {
+      setError(`Maximum bet for ${selectedToken} is ${limits.max}`);
+      return false;
+    }
+    
+    if (user && user.tokens[selectedToken] < amount) {
+      setError(`Insufficient ${selectedToken} balance`);
+      return false;
+    }
+    
+    return true;
+  };
+  
+  const handleProceed = () => {
+    if (validateBet()) {
+      setShowConfirmation(true);
+    }
+  };
+  
+  const handleConfirmBet = async () => {
+    if (!connected || !publicKey || !user) return;
+    
+    setIsCreatingBet(true);
+    setError('');
+    
+    try {
+      // Create bet
+      const betData = {
+        userId: publicKey.toString(),
+        direction: selectedDirection,
+        amount: parseFloat(betAmount),
+        token: selectedToken,
+        duration: duration
+      };
+      
+      const betResponse = await gameService.createBet(betData);
+      
+      if (betResponse.success) {
+        const bet = betResponse.data;
+        
+        // Navigate to game play screen with bet data
+        navigate('/game/play', { 
+          state: { 
+            betId: bet.betId,
+            bet: bet
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error creating bet:', error);
+      setError(error.response?.data?.message || 'Failed to create bet');
+      setShowConfirmation(false);
+    } finally {
+      setIsCreatingBet(false);
+    }
+  };
+  
+  const handleCancelConfirmation = () => {
+    setShowConfirmation(false);
+  };
+  
+  if (!connected) return null;
+  
+  return (
+    <motion.div 
+      className="game-setup-screen"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      <div className="neon-card" style={{ maxWidth: '600px', margin: '0 auto' }}>
+        <h2 className="neon-text" style={{ textAlign: 'center', marginBottom: '30px' }}>
+          🎮 SETUP YOUR PREDICTION
+        </h2>
+        
+        {!showConfirmation ? (
+          <>
+            {/* Direction Selection */}
+            <div style={{ marginBottom: '30px' }}>
+              <h4 style={{ marginBottom: '15px' }}>1. Select BTC Direction</h4>
+              <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+                <motion.button
+                  className={`direction-button ${selectedDirection === 'UP' ? 'selected' : ''}`}
+                  onClick={() => handleDirectionSelect('UP')}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  style={{
+                    width: '150px',
+                    height: '100px',
+                    border: `3px solid ${selectedDirection === 'UP' ? 'var(--neon-cyan)' : 'var(--neon-blue)'}`,
+                    borderRadius: '12px',
+                    background: selectedDirection === 'UP' 
+                      ? 'linear-gradient(135deg, rgba(0, 255, 187, 0.2) 0%, rgba(0, 255, 187, 0.1) 100%)'
+                      : 'rgba(0, 0, 0, 0.4)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    boxShadow: selectedDirection === 'UP' ? 'var(--neon-glow-cyan)' : 'none',
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  <motion.div
+                    animate={{ y: selectedDirection === 'UP' ? [-5, 0, -5] : 0 }}
+                    transition={{ duration: 1.5, repeat: selectedDirection === 'UP' ? Infinity : 0 }}
+                  >
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                      <path d="M7 14l5-5 5 5" stroke={selectedDirection === 'UP' ? 'var(--neon-cyan)' : 'var(--neon-blue)'} />
+                    </svg>
+                  </motion.div>
+                  <span className={selectedDirection === 'UP' ? 'neon-text-cyan' : 'neon-text'} 
+                    style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
+                    UP
+                  </span>
+                </motion.button>
+                
+                <motion.button
+                  className={`direction-button ${selectedDirection === 'DOWN' ? 'selected' : ''}`}
+                  onClick={() => handleDirectionSelect('DOWN')}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  style={{
+                    width: '150px',
+                    height: '100px',
+                    border: `3px solid ${selectedDirection === 'DOWN' ? 'var(--neon-pink)' : 'var(--neon-blue)'}`,
+                    borderRadius: '12px',
+                    background: selectedDirection === 'DOWN' 
+                      ? 'linear-gradient(135deg, rgba(255, 0, 212, 0.2) 0%, rgba(255, 0, 212, 0.1) 100%)'
+                      : 'rgba(0, 0, 0, 0.4)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    boxShadow: selectedDirection === 'DOWN' ? 'var(--neon-glow-pink)' : 'none',
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  <motion.div
+                    animate={{ y: selectedDirection === 'DOWN' ? [5, 0, 5] : 0 }}
+                    transition={{ duration: 1.5, repeat: selectedDirection === 'DOWN' ? Infinity : 0 }}
+                  >
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                      <path d="M7 10l5 5 5-5" stroke={selectedDirection === 'DOWN' ? 'var(--neon-pink)' : 'var(--neon-blue)'} />
+                    </svg>
+                  </motion.div>
+                  <span className={selectedDirection === 'DOWN' ? 'neon-text-pink' : 'neon-text'} 
+                    style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
+                    DOWN
+                  </span>
+                </motion.button>
+              </div>
+            </div>
+            
+            {/* Timer Selection */}
+            <div style={{ marginBottom: '30px' }}>
+              <h4 style={{ marginBottom: '15px' }}>2. Set Timer Duration</h4>
+              <div style={{ padding: '0 20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <span>Duration:</span>
+                  <span className="neon-text-purple" style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
+                    {duration} seconds
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="5"
+                  max="60"
+                  value={duration}
+                  onChange={(e) => setDuration(parseInt(e.target.value))}
+                  className="neon-slider"
+                  style={{
+                    width: '100%',
+                    height: '8px',
+                    borderRadius: '4px',
+                    background: `linear-gradient(to right, var(--neon-purple) 0%, var(--neon-purple) ${((duration - 5) / 55) * 100}%, rgba(255, 255, 255, 0.1) ${((duration - 5) / 55) * 100}%, rgba(255, 255, 255, 0.1) 100%)`,
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px', fontSize: '0.8rem', opacity: 0.7 }}>
+                  <span>5s</span>
+                  <span>30s</span>
+                  <span>60s</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Token & Amount Selection */}
+            <div style={{ marginBottom: '30px' }}>
+              <h4 style={{ marginBottom: '15px' }}>3. Choose Token & Amount</h4>
+              <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
+                {['BeTyche', 'SOL', 'ETH', 'RADBRO'].map((token) => (
+                  <motion.button
+                    key={token}
+                    className={`token-select-button ${selectedToken === token ? 'selected' : ''}`}
+                    onClick={() => setSelectedToken(token)}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      border: `2px solid ${selectedToken === token ? 'var(--neon-cyan)' : 'rgba(255, 255, 255, 0.2)'}`,
+                      borderRadius: '8px',
+                      background: selectedToken === token ? 'rgba(0, 255, 187, 0.1)' : 'rgba(0, 0, 0, 0.3)',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      boxShadow: selectedToken === token ? '0 0 10px rgba(0, 255, 187, 0.5)' : 'none'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '5px' }}>
+                      {token}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+                      {user && user.tokens[token] ? user.tokens[token].toFixed(2) : '0.00'}
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
+              
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="number"
+                  className="neon-input"
+                  value={betAmount}
+                  onChange={(e) => setBetAmount(e.target.value)}
+                  placeholder={`Enter amount (min: ${tokenLimits[selectedToken].min})`}
+                  style={{ paddingRight: '80px' }}
+                />
+                <span style={{
+                  position: 'absolute',
+                  right: '15px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--text-secondary)',
+                  fontSize: '0.9rem'
+                }}>
+                  {selectedToken}
+                </span>
+              </div>
+              
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                marginTop: '10px',
+                fontSize: '0.85rem',
+                opacity: 0.7
+              }}>
+                <span>Min: {tokenLimits[selectedToken].min}</span>
+                <span>Max: {tokenLimits[selectedToken].max}</span>
+              </div>
+            </div>
+            
+            {/* Error Message */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={{
+                  padding: '10px',
+                  marginBottom: '20px',
+                  borderRadius: '8px',
+                  background: 'rgba(255, 0, 0, 0.1)',
+                  border: '1px solid #ff0000',
+                  color: '#ff0000',
+                  textAlign: 'center'
+                }}
+              >
+                {error}
+              </motion.div>
+            )}
+            
+            {/* Current BTC Price */}
+            {btcPrice && (
+              <div style={{
+                textAlign: 'center',
+                marginBottom: '20px',
+                padding: '15px',
+                background: 'rgba(255, 62, 62, 0.05)',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 62, 62, 0.2)'
+              }}>
+                <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>Current BTC Price</div>
+                <div className="price-text" style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                  ${btcPrice.price.toFixed(2)}
+                </div>
+              </div>
+            )}
+            
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '15px' }}>
+              <motion.button
+                className="neon-button"
+                onClick={() => navigate('/')}
+                style={{ flex: 1 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                Cancel
+              </motion.button>
+              <motion.button
+                className="neon-button neon-button-cyan"
+                onClick={handleProceed}
+                style={{ flex: 2 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                Proceed to Confirm
+              </motion.button>
+            </div>
+          </>
+        ) : (
+          /* Confirmation Screen */
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <h3 style={{ textAlign: 'center', marginBottom: '30px' }}>
+              CONFIRM YOUR PREDICTION
+            </h3>
+            
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.4)',
+              borderRadius: '12px',
+              padding: '25px',
+              marginBottom: '30px'
+            }}>
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>Direction</div>
+                <div className={selectedDirection === 'UP' ? 'neon-text-cyan' : 'neon-text-pink'} 
+                  style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+                  {selectedDirection}
+                </div>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                <div>
+                  <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>Amount</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>
+                    {betAmount} {selectedToken}
+                  </div>
+                </div>
+                
+                <div>
+                  <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>Duration</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>
+                    {duration} seconds
+                  </div>
+                </div>
+              </div>
+              
+              <div style={{
+                padding: '15px',
+                background: 'rgba(255, 204, 0, 0.1)',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 204, 0, 0.3)'
+              }}>
+                <div style={{ fontSize: '0.9rem', marginBottom: '5px' }}>
+                  ⚡ Potential Win (minus 5% fee)
+                </div>
+                <div className="neon-text-gold" style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                  {(parseFloat(betAmount) * 2 * 0.95).toFixed(2)} {selectedToken}
+                </div>
+              </div>
+            </div>
+            
+            <div style={{ 
+              textAlign: 'center', 
+              marginBottom: '20px',
+              fontSize: '0.9rem',
+              opacity: 0.8
+            }}>
+              By confirming, you agree to lock your prediction at the current BTC price
+            </div>
+            
+            <div style={{ display: 'flex', gap: '15px' }}>
+              <motion.button
+                className="neon-button"
+                onClick={handleCancelConfirmation}
+                disabled={isCreatingBet}
+                style={{ flex: 1 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                Back
+              </motion.button>
+              <motion.button
+                className="neon-button neon-button-pink"
+                onClick={handleConfirmBet}
+                disabled={isCreatingBet}
+                style={{ flex: 2 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                {isCreatingBet ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                    <div className="loading-spinner" style={{ width: '20px', height: '20px', margin: 0 }} />
+                    Creating Bet...
+                  </div>
+                ) : (
+                  'CONFIRM BET'
+                )}
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </div>
+    </motion.div>
+  );
+};
+// Game Play Screen Component
+const GamePlayScreen = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { socket } = useAppContext();
+  
+  // Get bet data from navigation state
+  const { betId, bet } = location.state || {};
+  
+  // Game states
+  const [gamePhase, setGamePhase] = useState('COUNTDOWN'); // COUNTDOWN, MATCHING, PLAYING, COMPLETED
+  const [countdown, setCountdown] = useState(3);
+  const [matchingStatus, setMatchingStatus] = useState('Searching for opponent...');
+  const [opponent, setOpponent] = useState(null);
+  const [gameTimer, setGameTimer] = useState(0);
+  const [currentPrice, setCurrentPrice] = useState(null);
+  const [finalPrice, setFinalPrice] = useState(null);
+  const [gameResult, setGameResult] = useState(null);
+  
+  // Redirect if no bet data
+  useEffect(() => {
+    if (!betId || !bet) {
+      navigate('/game/setup');
+    }
+  }, [betId, bet, navigate]);
+  
+  // Join game room and listen for updates
+  useEffect(() => {
+    if (!socket || !betId) return;
+    
+    // Join user room for game updates
+    socket.emit('user:join', { userId: bet.userId });
+    
+    // Listen for match found
+    socket.on('match:found', (data) => {
+      if (data.betId === betId) {
+        setOpponent(data.opponent);
+        setMatchingStatus(data.isHouseBot ? 'Matched with House Bot' : 'Opponent found!');
+        setGamePhase('PLAYING');
+        startGameTimer();
+      }
+    });
+    
+    // Listen for match searching updates
+    socket.on('match:searching', (data) => {
+      if (data.betId === betId) {
+        setMatchingStatus('Searching for opponent...');
+      }
+    });
+    
+    // Listen for game start
+    socket.on('game:started', (data) => {
+      if (data.betId === betId) {
+        setGamePhase('PLAYING');
+        startGameTimer();
+      }
+    });
+    
+    // Listen for game countdown
+    socket.on('game:countdown', (data) => {
+      if (data.betId === betId) {
+        setGameTimer(data.remaining);
+      }
+    });
+    
+    // Listen for game completion
+    socket.on('game:completed', (data) => {
+      if (data.betId === betId) {
+        setFinalPrice(data.finalPrice);
+        setGameResult(data);
+        setGamePhase('COMPLETED');
+      }
+    });
+    
+    // Listen for price updates
+    socket.on('price:btc', (data) => {
+      setCurrentPrice(data.price);
+    });
+    
+    return () => {
+      socket.off('match:found');
+      socket.off('match:searching');
+      socket.off('game:started');
+      socket.off('game:countdown');
+      socket.off('game:completed');
+      socket.off('price:btc');
+    };
+  }, [socket, betId, bet]);
+  
+  // Initial countdown before matching
+  useEffect(() => {
+    if (gamePhase === 'COUNTDOWN' && countdown > 0) {
+      const timer = setTimeout(() => {
+        setCountdown(countdown - 1);
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    } else if (gamePhase === 'COUNTDOWN' && countdown === 0) {
+      startMatchmaking();
+    }
+  }, [countdown, gamePhase]);
+  
+  const startMatchmaking = async () => {
+    setGamePhase('MATCHING');
+    
+    try {
+      const matchData = {
+        userId: bet.userId,
+        direction: bet.direction,
+        amount: bet.amount,
+        token: bet.token,
+        duration: bet.duration
+      };
+      
+      const response = await gameService.startMatchmaking(betId, matchData);
+      
+      if (response.success) {
+        // Match found immediately
+        if (response.data.matched) {
+          setOpponent(response.data.opponent);
+          setMatchingStatus(response.data.isHouseBot ? 'Matched with House Bot' : 'Opponent found!');
+          
+          // Start game after short delay
+          setTimeout(() => {
+            startGame();
+          }, 2000);
+        }
+      }
+    } catch (error) {
+      console.error('Matchmaking error:', error);
+      setMatchingStatus('Error finding match');
+    }
+  };
+  
+  const startGame = async () => {
+    try {
+      await gameService.startGame(betId);
+      setGamePhase('PLAYING');
+      startGameTimer();
+    } catch (error) {
+      console.error('Error starting game:', error);
+    }
+  };
+  
+  const startGameTimer = () => {
+    setGameTimer(bet.duration);
+  };
+  
+  const handleBackToHome = () => {
+    navigate('/');
+  };
+  
+  const handlePlayAgain = () => {
+    navigate('/game/setup');
+  };
+  
+  if (!bet) return null;
+  
+  return (
+    <motion.div
+      className="game-play-screen"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      style={{ maxWidth: '800px', margin: '0 auto' }}
+    >
+      {/* Countdown Phase */}
+      {gamePhase === 'COUNTDOWN' && (
+        <motion.div className="neon-card" style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <h2 className="neon-text" style={{ marginBottom: '40px' }}>GET READY!</h2>
+          
+          <motion.div
+            key={countdown}
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 1.5, opacity: 0 }}
+            transition={{ duration: 0.5 }}
+            style={{
+              fontSize: '6rem',
+              fontWeight: 'bold',
+              fontFamily: 'Orbitron, sans-serif',
+              marginBottom: '40px'
+            }}
+            className={countdown <= 1 ? 'neon-text-pink' : countdown === 2 ? 'neon-text-gold' : 'neon-text-cyan'}
+          >
+            {countdown}
+          </motion.div>
+          
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ fontSize: '1.2rem', opacity: 0.8 }}>Your Prediction</div>
+            <div className={bet.direction === 'UP' ? 'neon-text-cyan' : 'neon-text-pink'} 
+              style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>
+              {bet.direction}
+            </div>
+          </div>
+          
+          <div style={{ fontSize: '1.1rem', opacity: 0.8 }}>
+            {bet.amount} {bet.token} • {bet.duration}s
+          </div>
+        </motion.div>
+      )}
+      
+      {/* Matching Phase */}
+      {gamePhase === 'MATCHING' && (
+        <motion.div className="neon-card" style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <h2 className="neon-text-purple" style={{ marginBottom: '40px' }}>FINDING OPPONENT</h2>
+          
+          <div style={{ position: 'relative', width: '150px', height: '150px', margin: '0 auto 40px' }}>
+            <motion.div
+              style={{
+                position: 'absolute',
+                width: '100%',
+                height: '100%',
+                border: '3px solid var(--neon-purple)',
+                borderRadius: '50%',
+                boxShadow: 'var(--neon-glow-purple)'
+              }}
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+            />
+            <motion.div
+              style={{
+                position: 'absolute',
+                width: '80%',
+                height: '80%',
+                top: '10%',
+                left: '10%',
+                border: '3px solid var(--neon-blue)',
+                borderRadius: '50%',
+                boxShadow: 'var(--neon-glow)'
+              }}
+              animate={{ rotate: -360 }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+            />
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              fontSize: '2rem'
+            }}>
+              🎮
+            </div>
+          </div>
+          
+          <motion.div
+            animate={{ opacity: [0.5, 1, 0.5] }}
+            transition={{ duration: 2, repeat: Infinity }}
+            style={{ fontSize: '1.2rem', marginBottom: '20px' }}
+          >
+            {matchingStatus}
+          </motion.div>
+          
+          <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>
+            Matching you with an opponent who predicted {bet.direction === 'UP' ? 'DOWN' : 'UP'}
+          </div>
+        </motion.div>
+      )}
+      
+      {/* Playing Phase */}
+      {gamePhase === 'PLAYING' && (
+        <motion.div 
+          className="neon-card"
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '30px' }}>
+            {/* Player Side */}
+            <div style={{
+              textAlign: 'center',
+              padding: '20px',
+              background: bet.direction === 'UP' ? 'rgba(0, 255, 187, 0.1)' : 'rgba(255, 0, 212, 0.1)',
+              borderRadius: '12px',
+              border: `2px solid ${bet.direction === 'UP' ? 'var(--neon-cyan)' : 'var(--neon-pink)'}`
+            }}>
+              <div style={{ fontSize: '0.9rem', opacity: 0.8, marginBottom: '10px' }}>YOU</div>
+              <div className={bet.direction === 'UP' ? 'neon-text-cyan' : 'neon-text-pink'} 
+                style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+                {bet.direction}
+              </div>
+              <div style={{ marginTop: '10px', fontSize: '1.1rem' }}>
+                {bet.amount} {bet.token}
+              </div>
+            </div>
+            
+            {/* Opponent Side */}
+            <div style={{
+              textAlign: 'center',
+              padding: '20px',
+              background: bet.direction === 'UP' ? 'rgba(255, 0, 212, 0.1)' : 'rgba(0, 255, 187, 0.1)',
+              borderRadius: '12px',
+              border: `2px solid ${bet.direction === 'UP' ? 'var(--neon-pink)' : 'var(--neon-cyan)'}`
+            }}>
+              <div style={{ fontSize: '0.9rem', opacity: 0.8, marginBottom: '10px' }}>
+                {opponent === 'HOUSE_BOT' ? 'HOUSE BOT' : 'OPPONENT'}
+              </div>
+              <div className={bet.direction === 'UP' ? 'neon-text-pink' : 'neon-text-cyan'} 
+                style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+                {bet.direction === 'UP' ? 'DOWN' : 'UP'}
+              </div>
+              <div style={{ marginTop: '10px', fontSize: '1.1rem' }}>
+                {bet.amount} {bet.token}
+              </div>
+            </div>
+          </div>
+          
+          {/* Game Timer */}
+          <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+            <motion.div
+              style={{
+                fontSize: '4rem',
+                fontWeight: 'bold',
+                fontFamily: 'Orbitron, sans-serif',
+                color: gameTimer <= 5 ? 'var(--neon-pink)' : 'var(--neon-blue)',
+                textShadow: gameTimer <= 5 ? 'var(--neon-glow-pink)' : 'var(--neon-glow)'
+              }}
+              animate={gameTimer <= 5 ? { scale: [1, 1.1, 1] } : {}}
+              transition={{ duration: 0.5, repeat: gameTimer <= 5 ? Infinity : 0 }}
+            >
+              {gameTimer}s
+            </motion.div>
+          </div>
+          
+          {/* Price Display */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
+            <div style={{
+              textAlign: 'center',
+              padding: '20px',
+              background: 'rgba(0, 0, 0, 0.4)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.2)'
+            }}>
+              <div style={{ fontSize: '0.9rem', opacity: 0.8, marginBottom: '5px' }}>Locked Price</div>
+              <div className="price-text" style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>
+                ${bet.lockedPrice.toFixed(2)}
+              </div>
+            </div>
+            
+            <div style={{
+              textAlign: 'center',
+              padding: '20px',
+              background: 'rgba(255, 62, 62, 0.1)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 62, 62, 0.3)'
+            }}>
+              <div style={{ fontSize: '0.9rem', opacity: 0.8, marginBottom: '5px' }}>Current Price</div>
+              <motion.div 
+                className="price-text" 
+                style={{ fontSize: '1.8rem', fontWeight: 'bold' }}
+                animate={currentPrice ? { scale: [1, 1.02, 1] } : {}}
+                transition={{ duration: 0.2 }}
+              >
+                ${currentPrice ? currentPrice.toFixed(2) : '---'}
+              </motion.div>
+            </div>
+          </div>
+          
+          {/* Price Change Indicator */}
+          {currentPrice && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '10px 20px',
+                background: currentPrice > bet.lockedPrice ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 0, 0, 0.1)',
+                borderRadius: '8px',
+                border: `1px solid ${currentPrice > bet.lockedPrice ? '#00ff00' : '#ff0000'}`
+              }}>
+                {currentPrice > bet.lockedPrice ? (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00ff00" strokeWidth="3">
+                    <path d="M7 14l5-5 5 5" />
+                  </svg>
+                ) : (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff0000" strokeWidth="3">
+                    <path d="M7 10l5 5 5-5" />
+                  </svg>
+                )}
+                <span style={{
+                  color: currentPrice > bet.lockedPrice ? '#00ff00' : '#ff0000',
+                  fontSize: '1.2rem',
+                  fontWeight: 'bold'
+                }}>
+                  ${Math.abs(currentPrice - bet.lockedPrice).toFixed(2)} 
+                  ({((Math.abs(currentPrice - bet.lockedPrice) / bet.lockedPrice) * 100).toFixed(2)}%)
+                </span>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      )}
+      
+      {/* Result Phase */}
+      {gamePhase === 'COMPLETED' && gameResult && (
+        <motion.div 
+          className="neon-card"
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5 }}
+          style={{ textAlign: 'center', padding: '40px 20px' }}
+        >
+          {/* Result Header */}
+          <motion.div
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+            {gameResult.result === 'WIN' ? (
+              <>
+                <h1 className="neon-text-cyan" style={{ fontSize: '3rem', marginBottom: '20px' }}>
+                  🎉 YOU WON! 🎉
+                </h1>
+                <div style={{ fontSize: '1.2rem', marginBottom: '30px' }}>
+                  Congratulations! Your prediction was correct.
+                </div>
+              </>
+            ) : gameResult.result === 'LOSS' ? (
+              <>
+                <h1 className="neon-text-pink" style={{ fontSize: '3rem', marginBottom: '20px' }}>
+                  😔 YOU LOST
+                </h1>
+                <div style={{ fontSize: '1.2rem', marginBottom: '30px' }}>
+                  Better luck next time!
+                </div>
+              </>
+            ) : (
+              <>
+                <h1 className="neon-text-gold" style={{ fontSize: '3rem', marginBottom: '20px' }}>
+                  🤝 IT'S A DRAW!
+                </h1>
+                <div style={{ fontSize: '1.2rem', marginBottom: '30px' }}>
+                  The price remained the same. Your bet has been returned.
+                </div>
+              </>
+            )}
+          </motion.div>
+          
+          {/* Price Summary */}
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.4 }}
+            style={{
+              background: 'rgba(0, 0, 0, 0.4)',
+              borderRadius: '12px',
+              padding: '25px',
+              marginBottom: '30px'
+            }}
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+              <div>
+                <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>Locked Price</div>
+                <div className="price-text" style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                  ${bet.lockedPrice.toFixed(2)}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>Final Price</div>
+                <div className="price-text" style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                  ${gameResult.finalPrice.toFixed(2)}
+                </div>
+              </div>
+            </div>
+            
+            <div style={{
+              padding: '15px',
+              background: gameResult.priceChange.amount > 0 ? 'rgba(0, 255, 0, 0.1)' : 
+                        gameResult.priceChange.amount < 0 ? 'rgba(255, 0, 0, 0.1)' : 
+                        'rgba(255, 204, 0, 0.1)',
+              borderRadius: '8px',
+              border: `1px solid ${gameResult.priceChange.amount > 0 ? '#00ff00' : 
+                                   gameResult.priceChange.amount < 0 ? '#ff0000' : 
+                                   'var(--neon-gold)'}`
+            }}>
+              <div style={{ fontSize: '0.9rem', opacity: 0.8, marginBottom: '5px' }}>Price Change</div>
+              <div style={{ 
+                fontSize: '1.8rem', 
+                fontWeight: 'bold',
+                color: gameResult.priceChange.amount > 0 ? '#00ff00' : 
+                       gameResult.priceChange.amount < 0 ? '#ff0000' : 
+                       'var(--neon-gold)'
+              }}>
+                {gameResult.priceChange.amount > 0 ? '+' : ''}{gameResult.priceChange.amount.toFixed(2)} 
+                ({gameResult.priceChange.amount > 0 ? '+' : ''}{gameResult.priceChange.percentage}%)
+              </div>
+            </div>
+          </motion.div>
+          
+          {/* Payout Info */}
+          {gameResult.result === 'WIN' && (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.6 }}
+              style={{
+                background: 'linear-gradient(135deg, rgba(0, 255, 187, 0.2) 0%, rgba(0, 255, 187, 0.1) 100%)',
+                borderRadius: '12px',
+                padding: '25px',
+                marginBottom: '30px',
+                border: '2px solid var(--neon-cyan)',
+                boxShadow: 'var(--neon-glow-cyan)'
+              }}
+            >
+              <div style={{ fontSize: '1.1rem', marginBottom: '15px' }}>🎉 Your Winnings</div>
+              <div className="neon-text-cyan" style={{ fontSize: '2.5rem', fontWeight: 'bold', marginBottom: '10px' }}>
+                {gameResult.payout.toFixed(2)} {bet.token}
+              </div>
+              <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>
+                (After 5% platform fee)
+              </div>
+            </motion.div>
+          )}
+          
+          {/* Action Buttons */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+            style={{ display: 'flex', gap: '15px' }}
+          >
+            <motion.button
+              className="neon-button"
+              onClick={handleBackToHome}
+              style={{ flex: 1 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              Back to Home
+            </motion.button>
+            <motion.button
+              className="neon-button neon-button-purple"
+              onClick={handlePlayAgain}
+              style={{ flex: 1 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              Play Again
+            </motion.button>
+          </motion.div>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+};
+
 
 // Splash Screen
 const SplashScreen = () => {

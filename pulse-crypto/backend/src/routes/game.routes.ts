@@ -1,33 +1,41 @@
 import express from 'express';
-import { 
-  createGame, 
-  startGame, 
-  getGame, 
-  getUserGames, 
-  getPendingGames 
+import {
+  createBet,
+  startMatchmaking,
+  startGame,
+  cancelBet,
+  getUserBets,
+  getActiveBets,
+  getQueueStatus
 } from '../controllers/game.controller';
 
 const router = express.Router();
 
-// Create a wrapper that properly handles the async controller functions
+// Async handler wrapper
 const asyncHandler = (fn: any) => 
   (req: express.Request, res: express.Response, next: express.NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 
-// Create a new game
-router.post('/create', asyncHandler(createGame));
+// Create a new bet
+router.post('/bet', asyncHandler(createBet));
 
-// Start a game (after countdown)
-router.post('/:gameId/start', asyncHandler(startGame));
+// Start matchmaking for a bet
+router.post('/bet/:betId/match', asyncHandler(startMatchmaking));
 
-// Get game details
-router.get('/:gameId', asyncHandler(getGame));
+// Start a game after countdown
+router.post('/bet/:betId/start', asyncHandler(startGame));
 
-// Get user's game history
-router.get('/user/:walletAddress', asyncHandler(getUserGames));
+// Cancel a bet
+router.post('/bet/:betId/cancel', asyncHandler(cancelBet));
 
-// Get pending games for matchmaking
-router.get('/pending/list', asyncHandler(getPendingGames));
+// Get user's bet history
+router.get('/user/:userId/bets', asyncHandler(getUserBets));
+
+// Get active bets (admin)
+router.get('/active', asyncHandler(getActiveBets));
+
+// Get matchmaking queue status
+router.get('/queue/status', asyncHandler(getQueueStatus));
 
 export default router;

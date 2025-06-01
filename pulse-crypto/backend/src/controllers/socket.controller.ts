@@ -1,5 +1,7 @@
 import { Server } from 'socket.io';
 import { getPriceManager } from '../services/price.service';
+import { getGameService } from '../services/game.service';
+import { getMatchmakingService } from '../services/matchmaking.service';
 
 // Socket controller setup
 export const setupSocketControllers = async (io: Server): Promise<void> => {
@@ -46,6 +48,8 @@ export const setupSocketControllers = async (io: Server): Promise<void> => {
         // Broadcast to other clients (for future P2P matchmaking)
         socket.broadcast.emit('user:online', { address: data.address });
       });
+
+      
       
       // Handle wallet disconnection
       socket.on('wallet:disconnect', (data) => {
@@ -71,3 +75,5 @@ export const setupSocketControllers = async (io: Server): Promise<void> => {
     console.error('Error setting up socket controllers:', error);
   }
 };
+
+
