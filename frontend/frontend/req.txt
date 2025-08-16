@@ -1,0 +1,290 @@
+BIP39 Passphrase (empty for none): 
+
+Wrote new keypair to /Users/mac/mainnet-house-wallet.json
+========================================================================
+pubkey: FWQzQa7RHGWraswwer49eyCv5tJwS2ur6KgyGekKT8La
+========================================================================
+Save this seed phrase and your BIP39 passphrase to recover your new keypair:
+tissue hole system hint gun resist season word street timber father echo
+========================================================================
+mac@macs-MacBook-Pro-2 pulse-crypto % 
+FWQzQa7RHGWraswwer49eyCv5tJwS2ur6KgyGekKT8La
+
+Project Title: Pulse – Crypto Micro Prediction Game
+Developer: Muhammad Usama Muavia
+Client: Pulse
+Start Date: May 7, 2025
+Timeline:
+	•	Development Phase: 21 calendar days
+	•	Post-Deployment Monitoring Phase: 2–3 weeks (light, observation only — no bug or support services included)
+
+⸻
+
+I. Project Description
+
+Pulse is a crypto-based, mobile-first micro prediction platform that allows users to wager tokens on real-time, short-duration predictions of Bitcoin (BTC) price movements. The goal is to provide an interactive, gamified trading experience with real-time matchmaking, on-chain wallet support, customizable admin controls, and a strong emphasis on referral-driven growth.
+
+The product will support the following features:
+	•	Wallet connection and token balance tracking for BeTyche (SPL), SOL, ETH, and RADBRO
+	•	Real-time BTC price data from the Pyth Network
+	•	Game mechanics based on short-term price prediction (5–60 seconds)
+	•	P2P matchmaking engine with automated fallback to treasury-bot if needed
+	•	Multi-token staking and win distribution with fee logic
+	•	A non-custodial referral and ambassador system with manual payout logic based on net losses
+	•	Admin dashboard with robust controls and analytics
+	•	Mobile-first Tron-inspired design with neon-themed UI/UX
+
+⸻
+
+II. Project Milestones and Deliverables
+
+Milestone 1: Foundations, Wallets, and Real-Time Feed
+
+Estimated Completion: ~Day 5
+
+Key Deliverables:
+	•	Project setup:
+	•	Frontend initialized using React.js with Tailwind CSS
+	•	Backend initialized using Node.js (Express) and MongoDB
+	•	Docker environment configured for cross-platform consistency
+	•	Blockchain integration:
+	•	Connect Reown AppKit-compatible wallets (Phantom, MetaMask, Coinbase Wallet, Solflare, Backpack, etc.)
+	•	Display wallet addresses and balances for BeTyche, SOL (initial)
+	•	Price feed setup:
+	•	BTC live price feed using Pyth Network (refresh interval 250–500ms)
+	•	Lock-in logic to capture BTC price at bet start
+	•	UI foundations:
+	•	Base screen layout and theme in Tron-style (dark base + neon accents)
+	•	Live test deployment for stakeholder feedback
+
+⸻
+
+Milestone 2: Game Logic, Matchmaking, and UI Views
+
+Estimated Completion: ~Day 10
+
+Key Deliverables:
+	•	Game engine:
+	•	“Up”/“Down” selection for BTC direction
+	•	Timer slider input: 5s to 60s
+	•	3-second confirmation countdown
+	•	Lock price at countdown start, calculate final price at timer end
+	•	Determine win/loss and apply 5% fee to winnings
+	•	Matchmaking logic:
+	•	Peer-to-peer match engine: match users with opposite predictions
+	•	Fallback to house bot if no match or two users choose same direction
+	•	UI Screens:
+	•	Home Screen
+	•	Game Setup View
+	•	Result Screen
+	•	Deployment:
+	•	Updated live version for iterative QA and feedback
+
+⸻
+
+Milestone 3: Referral System + Admin Panel (Phase 1)
+
+Estimated Completion: ~Day 15
+
+Key Deliverables:
+	•	Referral System:
+	•	Each user receives unique referral code/link
+	•	Bonus awarded to both referrer and referee (admin-configurable token/amount)
+	•	Bonuses are non-withdrawable and locked for in-game use only
+	•	Referral codes tracked in the backend
+	•	Admin Controls:
+	•	Toggle: Enable/Disable token types (BeTyche, SOL, ETH, RADBRO)
+	•	Adjust: Signup bonus amount and token type
+	•	Manage: Bet limits (min/max per token)
+	•	Configure: Treasury wallet address for house bot fallback
+	•	Enable/Disable: Giveaway campaigns for free tokens
+	•	Ambassador System:
+	•	Create custom ambassador codes
+	•	Assign manual % reward commissions based on net losses of referred users
+	•	All referral rewards are manually calculated and displayed, not auto-distributed
+
+⸻
+
+Milestone 4: Final Deployment, Analytics, and Polish
+
+Estimated Completion: ~Day 21
+
+Key Deliverables:
+	•	Betting History:
+	•	Viewable for each user with full details: prediction, stake, outcome, payout, timestamp
+	•	Filter options: All, Wins, Losses
+	•	Admin Analytics:
+	•	Platform-wide summaries: net wins/losses (daily/weekly/monthly)
+	•	Individual user analytics: total bets, win ratio, volume, referral origin
+	•	Export data in CSV or JSON format
+	•	UI Polish:
+	•	Tron-style finish with neon glow effects
+	•	Fully responsive layout (mobile-first)
+	•	Deployment:
+	•	Frontend: Netlify or Vercel
+	•	Backend: AWS or Render
+	•	Production domain: www.thepulse.bet
+
+⸻
+
+Milestone 5: Post-Launch Monitoring
+
+Estimated Completion: ~Day 39
+
+Key Deliverables:
+	•	Light monitoring of platform performance and usage patterns
+	•	Observation of matchmaking, token volume flow, and referral behavior
+	•	Developer remains accessible during this period for review (not for debugging or support)
+	•	Pulse provides final confirmation once monitoring is complete
+
+⸻
+
+III. System Functionality Overview
+
+Wallet Management
+	•	Connect and disconnect via Reown AppKit
+	•	Display real-time balances for:
+	•	BeTyche (SPL token)
+	•	SOL (Solana native)
+	•	ETH (via supported wallets)
+	•	RADBRO (Solana SPL)
+	•	Handle staking, payouts, and balance refresh logic
+	•	Deduct 5% win fee per successful prediction
+
+Prediction Game Engine
+	•	Short-duration BTC price predictions (5–60s)
+	•	Real-time price feed (Pyth)
+	•	Countdown logic with:
+	•	Entry price lock-in
+	•	Live visual tracker
+	•	Final price capture for result
+	•	Result banners: “You Won!” or “You Lost”
+	•	Display stake, win amount, and optional share button
+
+Token System
+	•	Multi-token support
+	•	Admin can enable/disable supported tokens
+	•	Buy More BeTyche button linking to external DEX or purchase page
+	•	Treasury wallet management for fallback bot logic
+
+Referral + Ambassador System
+	•	Referral tracking:
+	•	Code generation, referrer/referee linking
+	•	Stats dashboard: referrals, successful invites, in-game bonuses
+	•	Ambassador features:
+	•	Create ambassador codes manually
+	•	Track:
+	•	Referred users
+	•	Wallets
+	•	Net losses (losses – wins)
+	•	Bets placed and volumes
+	•	Assign % commissions (manual)
+	•	Exportable performance reports (CSV/JSON)
+
+Admin Dashboard
+	•	Configure:
+	•	Signup token bonuses (BeTyche or RADBRO)
+	•	Bet limits per token
+	•	Treasury wallet address
+	•	Token giveaway toggle
+	•	P2P vs. bot fallback behavior
+	•	View:
+	•	User analytics: activity, volume, referral source
+	•	Platform-wide metrics (net wins/losses, daily activity)
+	•	Flagged users for abuse prevention
+	•	Export data
+
+⸻
+
+IV. UI/UX Design Specifications
+
+Theme and Branding
+	•	Tron-inspired futuristic visual identity
+	•	Black backgrounds, neon outlines in blue, cyan, magenta, violet
+	•	Consistent glow effects on buttons, inputs, and timers
+	•	Optimized for mobile (first), responsive for desktop
+
+User Screens
+	•	Splash screen with animated Pulse logo and legal disclaimer
+	•	Home screen:
+	•	Live BTC price (red text)
+	•	“Connect Wallet” & “Play Now” buttons
+	•	Token balances always visible
+	•	Game screen:
+	•	Timer slider, stake input
+	•	UP/DOWN prediction buttons
+	•	Countdown clock
+	•	Matchmaking screen with status messages
+	•	Results screen: outcome, payout, share
+	•	Referral screen: link/code display, invite stats, ambassador panel
+	•	Bet history screen with expandable entries
+	•	Wallet screen for token balances, referral reward claiming
+	•	Profile/settings screen: address, support link, legal disclaimers
+
+⸻
+
+V. Technical Stack
+
+Layer	Technology
+Frontend	React.js, Tailwind CSS
+Backend	Node.js (Express), MongoDB
+Blockchain	Solana (BeTyche & RADBRO SPL), ETH wallet support
+Wallet Integration	Reown AppKit
+Price Feed	Pyth Network
+Real-Time	Socket.io
+Deployment	Docker, AWS or Render (backend), Netlify or Vercel (frontend)
+
+
+
+⸻
+
+VI. Ownership, Process, and Collaboration
+	•	All IP, source code, and assets belong to Pulse upon commencement
+	•	Code will be pushed regularly to Pulse’s private GitHub repository
+	•	Developer will deploy test versions during development for review
+	•	Communication and progress updates expected frequently (as agreed)
+	•	Final design/UI/UX decisions rest solely with Pulse
+	•	Any delays must be communicated in advance with proposed adjustments
+
+
+
+
+
+	Good news:
+The game engine is flowing well — bets go through, and win/loss results are showing. The core mechanics are definitely taking shape.
+
+A few things we noticed:
+
+Balance Update Logic
+•	Wins and losses are processing, but wallet balances don’t reflect the outcome yet — are balance updates active on-chain, or still pending?
+
+Game Engine Behavior
+•	Live BTC price disappears during gameplay — this should remain visible and updating throughout the countdown.
+•	Timer sometimes accelerates or goes into negative seconds — might be the reason for the auto-draw issue.
+•	It would be great if win/loss resolution could feel a bit quicker — right now there’s a noticeable delay post-game.
+
+Referral System
+•	Tested with multiple wallets, and the referrer/referred bonuses didn’t activate — can we confirm if the logic is wired in yet?
+
+Coinbase Wallet Integration
+•	Still prompts users to download the desktop extension on mobile — should be a smooth mobile-native experience.
+•	At times, Coinbase is the only selectable option, and users can’t pick other wallets (screen recording available if needed).
+
+Fallback Matchmaking Logic
+•	Right now it seems to default to P2P — but until we scale users, it should always auto-match with the house bot.
+•	Ideally, the switch between P2P and bot fallback should be admin-controlled — turned on/off dynamically as needed.
+
+Mobile Experience + Polish
+•	We’ll send over some updated copy and small UX tweaks soon.
+•	Keep the focus on mobile-first flow — that’s where 90%+ of our traffic will be.
+
+⸻
+
+Quick Notes:
+•	Hybrid Price Feed Add-On: We had added $75 to this milestone for hybrid feed support. If you’d rather push it to the next one, just let us know.
+•	Ambassador Testing: We’ve got dozens of users ready to test — is there a link we can safely share yet?
+•	Pulse Branding: TRON vibes are great — but let’s get Pulse logos and colors visible throughout to solidify identity.
+
+—
+
+All in all, this is a strong foundation. We’re pumped. The core is coming together — just a few finishing touches and we’ll be ready to let people experience it. Let’s keep going strong.

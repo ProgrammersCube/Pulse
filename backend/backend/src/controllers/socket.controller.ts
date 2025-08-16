@@ -1,0 +1,84 @@
+import { Server } from 'socket.io';
+import { getPriceManager } from '../services/price.service';
+import { getGameService } from '../services/game.service';
+import { getMatchmakingService } from '../services/matchmaking.service';
+
+// Socket controller setup
+export const setupSocketControllers = async (io: Server): Promise<void> => {
+  try {
+    console.log('Setting up socket controllers');
+    
+    // Get price manager
+    const priceManager = getPriceManager();
+    
+    // Setup price update interval for all connected clients
+    // CHANGED FROM 300ms to 250ms for faster real-time updates
+    const updateInterval = setInterval(() => {
+      // Get latest price
+      const btcPrice = priceManager.getLatestPrice('BTC');
+      
+      // Broadcast to all connected clients
+      io.emit('price:btc', {
+        symbol: 'BTC',
+        price: btcPrice.price,
+        timestamp: btcPrice.timestamp
+      });
+    }, 250); // Update every 250ms for real-time feel
+    
+    // Setup socket connections
+    io.on('connection', (socket) => {
+      console.log('Client connected:', socket.id);
+      
+      // Handle price subscription request
+      socket.on('subscribe:btc-price', () => {
+        console.log('Client subscribed to BTC price:', socket.id);
+        
+        // Send initial price immediately
+        const btcPrice = priceManager.getLatestPrice('BTC');
+        socket.emit('price:btc', {
+          symbol: 'BTC',
+          price: btcPrice.price,
+          timestamp: btcPrice.timestamp
+        });
+      });
+      
+      // Handle user joining room for game updates
+      socket.on('user:join', (data) => {
+        const { userId } = data;
+        socket.join(`user:${userId}`);
+        console.log(`User ${userId} joined room: user:${userId}`);
+      });
+      
+      // Handle wallet connection
+      socket.on('wallet:connect', (data) => {
+        console.log('Wallet connected:', data.address);
+        socket.join(`user:${data.address}`);
+        // Broadcast to other clients (for future P2P matchmaking)
+        socket.broadcast.emit('user:online', { address: data.address });
+      });
+      
+      // Handle wallet disconnection
+      socket.on('wallet:disconnect', (data) => {
+        console.log('Wallet disconnected:', data.address);
+        socket.leave(`user:${data.address}`);
+        // Broadcast to other clients
+        socket.broadcast.emit('user:offline', { address: data.address });
+      });
+      
+      // Handle client disconnection
+      socket.on('disconnect', () => {
+        console.log('Client disconnected:', socket.id);
+      });
+    });
+    
+    // Cleanup on server shutdown
+    process.on('SIGINT', () => {
+      clearInterval(updateInterval);
+      process.exit(0);
+    });
+    
+    console.log('Socket controllers setup complete');
+  } catch (error) {
+    console.error('Error setting up socket controllers:', error);
+  }
+};
