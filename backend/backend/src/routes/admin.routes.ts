@@ -9,7 +9,10 @@ import {
   calculateAmbassadorEarnings,
   getPublicSettings,
   ambassadarLogin,
-  ambassadarDassboardStats
+  ambassadarDassboardStats,
+  updateWalletRotation,
+  getWalletRotationWallets,
+  setActiveWallet
 } from '../controllers/admin.controller';
 import { adminAuth } from '../middleware/adminAuth';
 
@@ -27,7 +30,9 @@ router.get('/settings/public', getPublicSettings);
 // Settings
 router.get('/settings', getSettings);
 router.put('/settings', updateSettings);
-
+router.put('/update-wallet-rotation', updateWalletRotation)
+router.get("/settings/get-wallet-rotation",getWalletRotationWallets)
+router.put("/settings/setActiveWallet",setActiveWallet)
 // Dashboard
 router.get('/dashboard/stats', getDashboardStats);
 

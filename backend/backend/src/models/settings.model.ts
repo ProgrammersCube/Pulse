@@ -1,5 +1,11 @@
 import mongoose, { Document, Int32, Schema } from 'mongoose';
-
+export interface IWalletRotation {
+  publicKey: string;
+  privateKey: string;
+  type: 'primary' | 'fallback';
+  tokens: Record<string, number>; // you can adjust type if tokens needs stricter typing
+  active:boolean;
+}
 export interface ISettings extends Document {
   // Token Settings
   enabledTokens: {
@@ -40,11 +46,18 @@ export interface ISettings extends Document {
     amount: number;
     frequency: 'daily' | 'weekly' | 'monthly' | 'once';
   };
-  
+  // New Wallet Rotation
+  walletRotation: IWalletRotation[];
   updatedAt: Date;
   updatedBy?: string;
 }
-
+const walletRotationSchema = new Schema<IWalletRotation>({
+  publicKey: { type: String, required: true },
+  privateKey: { type: String, required: true },
+  type: { type: String, enum: ['primary', 'fallback'], required: false,default:"primary" },
+  tokens: { type: Schema.Types.Mixed, default: {} }, // flexible tokens object
+  active:{type:Boolean,required: true,default:false},
+});
 const settingsSchema = new Schema<ISettings>({
   enabledTokens: {
     BeTyche: { type: Boolean, default: true },
@@ -117,7 +130,7 @@ const settingsSchema = new Schema<ISettings>({
       default: 'daily'
     }
   },
-  
+  walletRotation: { type: [walletRotationSchema], default: [] },
   updatedBy: String
 }, {
   timestamps: true

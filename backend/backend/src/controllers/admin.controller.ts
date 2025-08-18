@@ -6,7 +6,24 @@ import Ambassador from '../models/ambassador.model';
 import User from '../models/user.model';
 import Bet from '../models/bet.model';
 import { stat } from 'fs';
+import CryptoJS from "crypto-js";
+async function updateSettingss(){
+  await Settings.updateOne(
+  {},
+  {
+    $push: {
+      walletRotation: {
+        publicKey: "0x21312321",
+        privateKey: "U2FsdGVkX1+mclFXO9wxJ+jw9Tu3oJGY2/pcSzlJVfw=",
+        type: "primary",
+        tokens: { BeTyche: 5000, SOL: 2 },
 
+      }
+    }
+  }
+);
+}
+// updateSettingss()
 // Generate JWT token
 const generateToken = (id: string): string => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'secret', {
@@ -123,7 +140,109 @@ export const getSettings = async (req: Request, res: Response): Promise<void> =>
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+function decryptWalletKey(encrypted:any) {
+  const SERVER_SHARED_SECRET = process.env.SHARED_SECRET_For_PRIVATE_KEY;
+  const bytes = CryptoJS.AES.decrypt(encrypted, SERVER_SHARED_SECRET || "");
+  return bytes.toString(CryptoJS.enc.Utf8);
+}
+export const updateWalletRotation=async (req:any,res:any)=>{
+   try {
+    const { privateKey, publicKey, tokens, type } = req.body;
 
+    if (!privateKey || !publicKey || !type) {
+      return res.status(400).json({ success: false, message: "Missing required fields" });
+    }
+
+    const privateLKey = decryptWalletKey(privateKey);
+
+    const walletData = {
+      publicKey,
+      privateKey,
+      type,
+      tokens: tokens || {}, // default empty object
+      updatedAt: new Date()
+    };
+
+    // Push new wallet into walletRotation array
+    const updatedData=await Settings.updateOne(
+      {},
+      { $push: { walletRotation: walletData } },
+      { upsert: true }
+    );
+
+    res.status(200).json({ success: true, data: updatedData });
+  } catch (error) {
+    console.error("Update wallet rotation error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+export const getWalletRotationWallets=async(req:any,res:any)=>{
+  try{
+  const getSettings=await Settings.findOne({})
+  const getActiveWallet = await Settings.findOne(
+  { walletRotation: { $elemMatch: { active: true, type: 'primary' } } }, // ensure same element
+  { 'walletRotation.$': 1 } // return only the matched element in the array
+).lean();
+
+  res.status(200).json({ success: true, data: getSettings?.walletRotation,activeWallet:getActiveWallet });  
+  }
+  catch (error) {
+    console.error("Get wallet rotation error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+export const setActiveWallet=async(req:any,res:any)=>{
+ try {
+    const { walletId,targetType } = req.body;
+    console.log(targetType)
+    if (!walletId) {
+      return res.status(400).json({ success: false, message: "walletId is required" });
+    }
+
+    // Find settings document
+    const settings = await Settings.findOne();
+    if (!settings) {
+      return res.status(404).json({ success: false, message: "Settings not found" });
+    }
+
+settings.walletRotation = settings.walletRotation.map((wallet: any) => {
+  const plainWallet = wallet.toObject?.() || wallet;
+
+  // If we are activating a PRIMARY walletId
+  if (plainWallet.type === "primary") {
+    console.log(plainWallet._id.toString() === walletId && targetType === "primary")
+    return {
+      ...plainWallet,
+      active: (plainWallet._id.toString() === walletId && targetType === "primary"),
+    };
+  }
+
+  // If we are activating a FALLBACK walletId
+  if (plainWallet.type === "fallback") {
+    console.log(plainWallet._id.toString() === walletId && targetType === "fallback")
+    return {
+      ...plainWallet,
+      active: (plainWallet._id.toString() === walletId && targetType === "fallback"),
+    };
+  }
+
+  // Leave all others untouched
+  return plainWallet;
+});
+
+    await settings.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Active wallet updated successfully",
+      data: settings.walletRotation
+    });
+  } catch (error) {
+    console.error("setActiveWallet error:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+
+}
 // Update settings
 export const updateSettings = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -137,6 +256,31 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
     
     // Update fields
     Object.assign(settings, updates);
+    // Handle wallet rotation if provided
+//     if (updates?.walletRotation) {
+//       const { publicKey, privateKey,type } = updates?.walletRotation;
+//       const decryptedPrivateKey = decryptWalletKey(privateKey);
+//         // settings.walletRotation = {
+//         //   publicKey,
+//         //   privateKey:encryptedPrivateKey,
+
+//         //   updatedAt: new Date()
+//         // };
+//         await Settings.updateOne(
+//   {},
+//   {
+//     $push: {
+//       walletRotation: {
+//         publicKey,
+//         privateKey: decryptedPrivateKey,
+//         type,
+//         // tokens: { BeTyche: 5000, SOL: 2 },
+
+//       }
+//     }
+//   }
+// );
+//     }
     settings.updatedBy = adminId;
     
     await settings.save();
