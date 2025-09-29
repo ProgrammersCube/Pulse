@@ -130,7 +130,8 @@ export const styles={
     border: '1px solid rgba(255, 255, 255, 0.1)',
     boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
     position: 'relative',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    zIndex: 15
   },
   cardGlow: {
     position: 'absolute',
@@ -159,7 +160,8 @@ export const styles={
     border: '1px solid rgba(255, 255, 255, 0.1)',
     position: 'relative',
     overflow: 'hidden',
-    transition: 'all 0.3s ease'
+    transition: 'all 0.3s ease',
+    zIndex: 15
   },
   iconBox: {
     width: '56px',
@@ -216,8 +218,7 @@ export const styles={
     gap: '0.75rem',
     backdropFilter: 'blur(20px)',
     boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-    zIndex: 100,
-    minWidth: '300px'
+    zIndex: 1001
   },
   loginCard: {
     maxWidth: '480px',
@@ -229,7 +230,8 @@ export const styles={
     border: '2px solid rgba(168, 85, 247, 0.3)',
     boxShadow: '0 20px 60px rgba(168, 85, 247, 0.3)',
     position: 'relative',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    zIndex: 20
   },
   shimmerAnimation: `
     @keyframes shimmer {
@@ -262,7 +264,7 @@ export const styles={
     minHeight: '100vh',
     padding: '2rem',
     position: 'relative',
-    zIndex: 2,
+    zIndex: 12,
     maxWidth: '1400px',
     margin: '0 auto',
     width: '100%'
@@ -280,7 +282,9 @@ export const styles={
     padding: '1.5rem',
     backdropFilter: 'blur(10px)',
     border: '1px solid rgba(255, 255, 255, 0.1)',
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+    position: 'relative',
+    zIndex: 13
   },
   
   headerLeft: {

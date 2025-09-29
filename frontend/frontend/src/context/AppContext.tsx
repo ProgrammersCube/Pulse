@@ -45,7 +45,7 @@ const defaultContext: AppContextType = {
   error: null,
   refreshUserData: async () => {},
   updateTokens: async () => {},
-  updateTokens: async () => {}
+  showToast: () => {}
 };
 
 const AppContext = createContext<AppContextType>(defaultContext);
@@ -160,10 +160,12 @@ export const AppContextProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setError(null);
     
     try {
-      const userData = await fetchUserData(publicKey.toString());
+      // ✅ Fix: Pass login type for Trust Wallet compatibility
+      const userData = await fetchUserData(publicKey.toString(), 'trust');
       setUser(userData);
+      console.log('✅ User data fetched successfully:', userData);
     } catch (error) {
-      console.error('Error fetching user data:', error);
+      console.error('❌ Error fetching user data:', error);
       setError('Failed to load user data');
     } finally {
       setLoading(false);
@@ -188,13 +190,20 @@ export const AppContextProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   };
 
+  // ✅ Fix: Add missing showToast function
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    // Simple toast implementation - you can enhance this later
+    console.log(`Toast [${type}]: ${message}`);
+  };
+
   const value = {
     user,
     btcPrice,
     loading,
     error,
     refreshUserData,
-    updateTokens
+    updateTokens,
+    showToast
   };
 
   return (

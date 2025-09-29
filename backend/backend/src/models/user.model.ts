@@ -27,6 +27,7 @@ export interface IUser extends Document {
   isAmbassador: boolean;
   userName:string;
   password:string;
+  resetotpCode:string;
   wallets:string[];
 }
 
@@ -46,12 +47,12 @@ const userSchema = new Schema<IUser>(
       unique: true,
       trim: true
     },
-     wallets: [{
-    type: String,
-    unique: true,
-    sparse: true,
-    trim: true
-  }],
+     wallets: {
+    type: [String],
+    default: [],
+    trim: true,
+    sparse: true  // This allows multiple undefined values
+  },
     tokens: {
       BeTyche: {
         type: Number,
@@ -99,6 +100,9 @@ const userSchema = new Schema<IUser>(
       default: null,
       index: true
     },
+    resetotpCode:{
+    type:String
+  },
     lastActive: {
       type: Date,
       default: Date.now
@@ -107,7 +111,8 @@ const userSchema = new Schema<IUser>(
   {
     timestamps: true,
     versionKey: false
-  }
+  },
+  
 );
 
 // Indexes for performance

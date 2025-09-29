@@ -5,7 +5,7 @@ dotenv.config();
 import express, { Application } from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
-import { seedAdmin } from './scripts/seedAdmin';
+import { seedAdmin,createSettings } from './scripts/seedAdmin';
 // import dotenv from 'dotenv';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -98,6 +98,7 @@ mongoose
       console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
       console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
       //seedAdmin()
+      //createSettings()
     });
   })
   .catch(error => {
