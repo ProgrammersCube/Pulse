@@ -36,7 +36,8 @@ import {
   getAdminProfile,
   changeAdminPassword,
   getUserAnalytics,
-  changeUserPassword
+  changeUserPassword,
+  checkJWTSecret
 } from '../controllers/admin.controller';
 import { adminAuth } from '../middleware/adminAuth';
 import { ambassadorAuth } from '../middleware/ambassadarauth';
@@ -48,7 +49,7 @@ router.post("/ambassadar-login",ambassadarLogin)
 // Public endpoint (no auth required)
 router.get('/settings/public', getPublicSettings);
 router.get('/active-wallet-public-key', getCurrentActiveWalletPublicKey);
-
+router.post('/health/jwt-check', checkJWTSecret);
 // Protected routes (require admin auth)
 //  router.use(adminAuth);
 router.post("/get-ambassadar-from-token",ambassadorAuth,(req:any,res:any)=>{

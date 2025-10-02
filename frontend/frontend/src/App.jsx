@@ -2056,39 +2056,40 @@ const GameSetupScreen = ({ showToast }) => {
       
       try {
         // Method 1: Try using sendTransaction
-        if (walletProvider.sendTransaction) {
-          signature = await walletProvider.sendTransaction(transaction, connection);
-        } 
-        // Method 2: Try using signAndSendTransaction
-        else if (walletProvider.signAndSendTransaction) {
-          const result = await walletProvider.signAndSendTransaction(transaction);
-          signature = result.signature;
-        }
+        // if (walletProvider.sendTransaction) {
+        //   signature = await walletProvider.sendTransaction(transaction, connection);
+        // } 
+        // // Method 2: Try using signAndSendTransaction
+        // else if (walletProvider.signAndSendTransaction) {
+        //   const result = await walletProvider.signAndSendTransaction(transaction);
+        //   signature = result.signature;
+        // }
         // Method 3: Sign then send separately
-        else if (walletProvider.signTransaction) {
+        //else if (walletProvider.signTransaction) {
           const signedTx = await walletProvider.signTransaction(transaction);
           signature = await connection.sendRawTransaction(signedTx.serialize());
-        }
-        else {
-          throw new Error('Wallet does not support any transaction methods');
-        }
+       // }
+        // else {
+        //   throw new Error('Wallet does not support any transaction methods');
+        // }
       } catch (walletError) {
         console.error('Wallet error:', walletError);
         
         // Handle specific Solana transaction errors
         if (walletError.message && walletError.message.includes('already been processed')) {
-          // Remove from cache to allow retry
+          console.log('⚠️ Transaction already processed - this may be a duplicate attempt');
+          
+          // Check if we can extract the signature from the error or recent transactions
+          // The backend will reject if it's truly a duplicate via signature tracking
+          
+          // Remove from cache to allow retry if backend rejects
           setRecentTransactions(prev => {
             const newMap = new Map(prev);
             newMap.delete(transactionKey);
             return newMap;
           });
-          
-          // Show specific error message for this case
-          setError('Transaction already submitted. Please wait for confirmation or check your wallet.');
-          setTimeout(() => setError(''), 8000);
-          
-          throw new Error('Transaction already submitted. Please wait for confirmation or check your wallet.');
+          console.log(walletError.message)
+          throw new Error('Duplicate transaction detected by Solana network. If your bet was not created, please wait 30 seconds and try again, or try a slightly different amount (e.g., 0.101 instead of 0.1).');
         }
         
         // Handle other common Solana errors
@@ -2098,6 +2099,10 @@ const GameSetupScreen = ({ showToast }) => {
         
         if (walletError.message && walletError.message.includes('blockhash')) {
           throw new Error('Transaction expired. Please try again.');
+        }
+        
+        if (walletError.message && walletError.message.includes('User rejected')) {
+          throw new Error('Transaction cancelled by user.');
         }
         
         throw new Error('Failed to sign transaction. Make sure your wallet is unlocked.');

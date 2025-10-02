@@ -1,5 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
-
+import bcrypt from 'bcryptjs';
 // Token balance interface
 interface ITokens {
   BeTyche: number;
@@ -145,7 +145,23 @@ userSchema.methods.toJSON = function() {
   delete obj.__v;
   return obj;
 };
-
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error: any) {
+    next(error);
+  }
+});
+userSchema.methods.comparePassword = async function(candidatePassword: string): Promise<boolean> {
+  console.log(this.password);
+  console.log(candidatePassword);
+  console.log(await bcrypt.compare(candidatePassword, this.password));
+  return bcrypt.compare(candidatePassword, this.password);
+};
 // Export the model
 const User =
   mongoose.models.User || mongoose.model<IUser>('User', userSchema);

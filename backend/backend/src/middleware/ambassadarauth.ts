@@ -18,8 +18,11 @@ export const ambassadorAuth = async (
       res.status(401).json({ success: false, message: 'No token provided' });
       return;
     }
-    
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
+    if (!process.env.JWT_SECRET) {
+      res.status(401).json({ success: false, message: 'JWT_SECRET must be defined in .env file' });
+      return;
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET ) as any;
     const ambassador = await Ambassador.findById(decoded.id);
     
     if (!ambassador || !ambassador.isActive) {

@@ -600,42 +600,255 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
       }
     }
     
-    // Verify transaction
-    // In blockchain.service.ts - Update verifyTransaction method
-async verifyTransaction(signature: string): Promise<boolean> {
-  try {
-    console.log(`🔍 Verifying transaction: ${signature}`);
-    
-    // Parse the signature
-    const txSignature = signature;
-    
-    // Get transaction details
-    const transaction = await this.connection.getTransaction(txSignature, {
-      commitment: 'confirmed',
-      maxSupportedTransactionVersion: 0
-    });
-    
-    if (!transaction) {
-      console.log('❌ Transaction not found');
-      return false;
+    // Verify transaction with strict security checks
+    async verifyTransaction(
+      signature: string,
+      expectedSender: string,
+      expectedAmount: number,
+      expectedToken: string
+    ): Promise<{ valid: boolean; error?: string }> {
+      try {
+        console.log(`🔍 Verifying transaction with strict checks:`, {
+          signature,
+          expectedSender,
+          expectedAmount,
+          expectedToken
+        });
+        
+        // 1. Check if transaction signature has already been used (prevent replay attacks)
+        const Transaction = (await import('../models/transaction.model')).default;
+        const existingTx = await Transaction.findOne({ signature });
+        if (existingTx) {
+          console.log('❌ Transaction signature already used');
+          return { valid: false, error: 'Transaction signature has already been used' };
+        }
+        
+        // 2. Get transaction details from blockchain
+        // Try finalized first, fall back to confirmed if not yet finalized
+        let transaction = await this.connection.getTransaction(signature, {
+          commitment: 'finalized',
+          maxSupportedTransactionVersion: 0
+        });
+        
+        // If not finalized yet, try confirmed (still secure)
+        if (!transaction) {
+          console.log('⏳ Transaction not finalized yet, checking confirmed status...');
+          transaction = await this.connection.getTransaction(signature, {
+            commitment: 'confirmed',
+            maxSupportedTransactionVersion: 0
+          });
+          
+          if (!transaction) {
+            console.log('❌ Transaction not found on blockchain');
+            return { valid: false, error: 'Transaction not found. Please wait a few seconds and try again.' };
+          }
+          
+          console.log('✅ Transaction confirmed (not yet finalized)');
+        } else {
+          console.log('✅ Transaction finalized');
+        }
+        
+        // 3. Check if transaction was successful
+        if (transaction.meta?.err) {
+          console.log('❌ Transaction failed:', transaction.meta.err);
+          return { valid: false, error: 'Transaction failed on blockchain' };
+        }
+        
+        // 4. Get current active house wallet
+        const houseWallet = await this.ensureHouseWallet();
+        const expectedRecipient = houseWallet.publicKey.toString();
+        
+        // 5. Verify sender, recipient, and amount based on token type
+        let verified = false;
+        
+        if (expectedToken === 'SOL') {
+          // Verify SOL transfer
+          verified = this.verifySOLTransfer(
+            transaction,
+            expectedSender,
+            expectedRecipient,
+            expectedAmount
+          );
+        } else {
+          // Verify SPL token transfer
+          verified = await this.verifySPLTokenTransfer(
+            transaction,
+            expectedSender,
+            expectedRecipient,
+            expectedAmount,
+            expectedToken
+          );
+        }
+        
+        if (!verified) {
+          console.log('❌ Transaction verification failed');
+          return { valid: false, error: 'Transaction details do not match expected values' };
+        }
+        
+        // 6. Record transaction signature to prevent future reuse
+        const txRecord = await Transaction.create({
+          signature,
+          sender: expectedSender,
+          recipient: expectedRecipient,
+          amount: expectedAmount,
+          token: expectedToken,
+          usedAt: new Date()
+        });
+        
+        console.log(`📝 Transaction signature recorded in database: ${signature}`);
+        
+        console.log('✅ Transaction verified successfully with all security checks');
+        return { valid: true };
+        
+      } catch (error) {
+        console.error('❌ Error verifying transaction:', error);
+        return { 
+          valid: false, 
+          error: error instanceof Error ? error.message : 'Transaction verification error' 
+        };
+      }
     }
     
-    // Check if transaction was successful
-    if (transaction.meta?.err) {
-      console.log('❌ Transaction failed:', transaction.meta.err);
+    // Helper: Verify SOL transfer details
+    private verifySOLTransfer(
+      transaction: any,
+      expectedSender: string,
+      expectedRecipient: string,
+      expectedAmount: number
+    ): boolean {
+      try {
+        const accountKeys = transaction.transaction.message.accountKeys;
+        const preBalances = transaction.meta.preBalances;
+        const postBalances = transaction.meta.postBalances;
+        
+        // Find sender and recipient indices
+        let senderIndex = -1;
+        let recipientIndex = -1;
+        
+        for (let i = 0; i < accountKeys.length; i++) {
+          const key = accountKeys[i].pubkey || accountKeys[i];
+          const keyStr = key.toString();
+          
+          if (keyStr === expectedSender) {
+            senderIndex = i;
+          }
+          if (keyStr === expectedRecipient) {
+            recipientIndex = i;
+          }
+        }
+        
+        if (senderIndex === -1) {
+          console.log('❌ Sender not found in transaction');
+          return false;
+        }
+        
+        if (recipientIndex === -1) {
+          console.log('❌ Recipient (house wallet) not found in transaction');
+          return false;
+        }
+        
+        // Calculate actual transferred amount (in lamports)
+        const senderBalanceChange = preBalances[senderIndex] - postBalances[senderIndex];
+        const recipientBalanceChange = postBalances[recipientIndex] - preBalances[recipientIndex];
+        const expectedLamports = Math.floor(expectedAmount * LAMPORTS_PER_SOL);
+        
+        console.log('💰 Balance changes:', {
+          senderDecrease: senderBalanceChange,
+          recipientIncrease: recipientBalanceChange,
+          expectedLamports
+        });
+        
+        // Verify recipient received at least the expected amount (may be slightly less due to fees)
+        const tolerance = 5000; // 0.000005 SOL tolerance for fee variance
+        if (recipientBalanceChange < (expectedLamports - tolerance)) {
+          console.log('❌ Amount mismatch');
+          return false;
+        }
+        
+        console.log('✅ SOL transfer verified');
+        return true;
+        
+      } catch (error) {
+        console.error('❌ Error verifying SOL transfer:', error);
       return false;
+      }
     }
     
-    console.log('✅ Transaction verified successfully');
+    // Helper: Verify SPL token transfer details
+    private async verifySPLTokenTransfer(
+      transaction: any,
+      expectedSender: string,
+      expectedRecipient: string,
+      expectedAmount: number,
+      tokenSymbol: string
+    ): Promise<boolean> {
+      try {
+        // Get token mint address from network configuration
+        const tokenMint = TOKEN_MINTS[tokenSymbol as keyof typeof TOKEN_MINTS];
+        if (!tokenMint) {
+          console.log('❌ Token mint not found for', tokenSymbol);
+          return false;
+        }
+        
+        // Parse token transfer from transaction
+        const postTokenBalances = transaction.meta?.postTokenBalances || [];
+        const preTokenBalances = transaction.meta?.preTokenBalances || [];
+        
+        // Find the token transfer to house wallet
+        let recipientChange = 0;
+        let senderChange = 0;
+        
+        for (const postBalance of postTokenBalances) {
+          const preBalance = preTokenBalances.find((p: any) => p.accountIndex === postBalance.accountIndex);
+          if (!preBalance) continue;
+          
+          const owner = postBalance.owner;
+          const mint = postBalance.mint;
+          
+          if (mint !== tokenMint) continue;
+          
+          const change = Number(postBalance.uiTokenAmount.amount) - Number(preBalance.uiTokenAmount.amount);
+          
+          if (owner === expectedRecipient) {
+            recipientChange = change / Math.pow(10, postBalance.uiTokenAmount.decimals);
+          }
+          if (owner === expectedSender) {
+            senderChange = Math.abs(change) / Math.pow(10, postBalance.uiTokenAmount.decimals);
+          }
+        }
+        
+        console.log('💰 Token balance changes:', {
+          recipientIncrease: recipientChange,
+          senderDecrease: senderChange,
+          expectedAmount
+        });
+        
+        // Verify amounts match (with small tolerance for rounding)
+        const tolerance = 0.0001;
+        if (Math.abs(recipientChange - expectedAmount) > tolerance) {
+          console.log('❌ Token amount mismatch');
+          return false;
+        }
+        
+        console.log('✅ SPL token transfer verified');
     return true;
     
   } catch (error) {
-    console.error('❌ Error verifying transaction:', error);
-    // For testing, you might want to return true here
-    // return true; // ONLY FOR TESTING!
-    return false;
-  }
-}
+        console.error('❌ Error verifying SPL token transfer:', error);
+        return false;
+      }
+    }
+    
+    // Update transaction record with betId
+    async updateTransactionBetId(signature: string, betId: string): Promise<void> {
+      try {
+        const Transaction = (await import('../models/transaction.model')).default;
+        await Transaction.updateOne({ signature }, { betId });
+        console.log(`📝 Updated transaction ${signature} with betId: ${betId}`);
+      } catch (error) {
+        console.error('❌ Error updating transaction betId:', error);
+      }
+    }
   }
   
   // Singleton instance

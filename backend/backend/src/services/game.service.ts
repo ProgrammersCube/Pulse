@@ -113,19 +113,19 @@ async createBet(request: CreateBetRequest): Promise<IBet> {
 
   console.log(`🔍 Verifying transaction: ${transactionSignature}`);
   
-  try {
-    const isValid = await this.blockchainService.verifyTransaction(transactionSignature);
-    
-    if (!isValid) {
-      throw new Error('Invalid transaction signature');
-    }
-    
-    console.log('✅ Transaction verified - tokens received by house');
-  } catch (verifyError) {
-    console.error('❌ Transaction verification error:', verifyError);
-    // For testing, you might want to skip verification temporarily
-            console.log('WARNING: Skipping transaction verification for testing');
+  // Strict transaction verification with all security checks
+  const verificationResult = await this.blockchainService.verifyTransaction(
+    transactionSignature,
+    userId, // expected sender
+    amount, // expected amount
+    token   // expected token
+  );
+  
+  if (!verificationResult.valid) {
+    throw new Error(verificationResult.error || 'Transaction verification failed');
   }
+  
+  console.log('✅ Transaction verified - all security checks passed');
   
   // CHECK ALL HOUSE BALANCES FIRST
   const houseWalletAddress = await this.getHouseWalletAddress();
@@ -203,6 +203,9 @@ async createBet(request: CreateBetRequest): Promise<IBet> {
   });
   
   await bet.save();
+  
+  // Link transaction signature to betId for audit trail
+  await blockchainService.updateTransactionBetId(transactionSignature, betId);
   
   // Update database balance to reflect blockchain transfer
   await this.syncDatabaseBalance(userId, token);

@@ -16,7 +16,7 @@ const generateOtp = (length: number = 6) => {
 };
 // Generate JWT token
 const generateToken = (id: string): string => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'secret', {
+  return jwt.sign({ id }, process.env.JWT_SECRET as string , {
     expiresIn: '7d'
   });
 };
@@ -702,18 +702,11 @@ export const pulseLogin=async(req:any,res:any)=>
           res.status(401).json({ success: false, message: 'Invalid username' });
           return;
         }
-        if(user?.password!=password)
-        {
-  res.status(401).json({ success: false, message: 'Invalid password' });
+        const isMatch = await user.comparePassword(password);
+        if (!isMatch) {
+          res.status(401).json({ success: false, message: 'Invalid password' });
           return;
         }
-        // // Check password
-        // const isMatch = await user.comparePassword(password);
-        // if (!isMatch) {
-        //   res.status(401).json({ success: false, message: 'Invalid credentials' });
-        //   return;
-        // }
-        
         // Update last login
         user.lastLogin = new Date();
         await user.save();

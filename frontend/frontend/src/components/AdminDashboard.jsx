@@ -667,6 +667,8 @@ const AdminDashboard = () => {
 
   // Handle process payment
   const handleProcessPayment = async () => {
+    alert("Payout Execution is currently disabled")
+    return;
     if (!paymentRequest) return;
     
     setPaymentLoading(true);
@@ -772,7 +774,7 @@ const AdminDashboard = () => {
     if (token === 'SOL' || token === 'ETH') {
       return amount?.toFixed(6);
     }
-    return formatNumber(amount.toFixed(2));
+    return formatNumber(amount?.toFixed(2));
   };
   const generateUniqueCode = () => {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -1536,7 +1538,7 @@ const AdminDashboard = () => {
                         WebkitTextFillColor: 'transparent'
                       }}>
                         {formatNumber(
-                          stats?.totalPlatformFees.toFixed(6)
+                          stats?.totalPlatformFees?.toFixed(6)
                         )}
                       </p>
                     </div>
@@ -1715,7 +1717,7 @@ const AdminDashboard = () => {
                                   ${formatNumber(player.netPL)}
                                 </td>
                                 <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                                  {player.winRate.toFixed(1)}%
+                                  {player?.winRate?.toFixed(1)}
                                 </td>
                               </tr>
                             ))}
@@ -1883,7 +1885,7 @@ const AdminDashboard = () => {
                         </div>
                         <div style={{ textAlign: 'center' }}>
                           <div style={{ color: '#fff', fontSize: '1.5rem', fontWeight: 'bold' }}>
-                            {netRevenueData.overall.winRate.toFixed(1)}%
+                            {netRevenueData?.overall?.winRate?.toFixed(1)}%
                           </div>
                           <div style={{ color: '#888', fontSize: '0.9rem' }}>Win Rate</div>
                         </div>
@@ -1919,7 +1921,7 @@ const AdminDashboard = () => {
                                   ${formatNumber(token.totalLosses)}
                                 </td>
                                 <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                                  {token.winRate.toFixed(1)}%
+                                  {token?.winRate?.toFixed(1)}%
                                 </td>
                                 <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                                   ${formatNumber(token.totalVolume)}
@@ -4005,7 +4007,7 @@ const AdminDashboard = () => {
               marginBottom: '0.25rem'
             }}>
               Amount: <span style={{ color: '#10b981', fontWeight: '600' }}>
-                ${request.amount.toFixed(2)}
+                ${request?.amount?.toFixed(2)}
               </span>
             </div>
             <div style={{
@@ -4169,7 +4171,7 @@ const AdminDashboard = () => {
                 fontSize: '0.9rem',
                 marginBottom: '0.25rem'
               }}>
-                Amount: {request.amount.toFixed(2)} sol
+                Amount: {request?.amount?.toFixed(2)} sol
               </p>
               <p style={{
                 color: 'rgba(255, 255, 255, 0.7)',
@@ -4432,7 +4434,7 @@ const AdminDashboard = () => {
                                   fontWeight: 'bold',
                                   color: '#ef4444'
                                 }}>
-                                  ${formatNumber(amb.totalLossesGenerated.toFixed(6))}
+                                  ${formatNumber(amb?.totalLossesGenerated?.toFixed(6))}
                                 </p>
                               </div>
                               
@@ -4449,7 +4451,7 @@ const AdminDashboard = () => {
                                   fontWeight: 'bold',
                                   color: '#22c55e'
                                 }}>
-                                  ${formatNumber(amb.totalWinsGenerated.toFixed(6))}
+                                  ${formatNumber(amb?.totalWinsGenerated?.toFixed(6))}
                                 </p>
                               </div>
                               
@@ -4466,7 +4468,7 @@ const AdminDashboard = () => {
                                   fontWeight: 'bold',
                                   color: amb.totalNetLoss > 0 ? '#ef4444' : '#22c55e'
                                 }}>
-                                  ${formatNumber(amb.totalNetLoss.toFixed(6))}
+                                  ${formatNumber(amb?.totalNetLoss?.toFixed(6))}
                                 </p>
                               </div>
                               
@@ -4483,7 +4485,7 @@ const AdminDashboard = () => {
                                   fontWeight: 'bold',
                                   color: amb.totalEarnings < 0 ? '#ef4444' : '#f59e0b'
                                 }}>
-                                  ${amb.totalEarnings < 0 ? '0.00' : formatNumber(amb.totalEarnings.toFixed(6))}
+                                  ${amb?.totalEarnings < 0 ? '0.00' : formatNumber(amb?.totalEarnings?.toFixed(6))}
                                 </p>
                               </div>
                               
@@ -5497,7 +5499,7 @@ const AdminDashboard = () => {
                         textAlign: 'center'
                       }}>
                         <div style={{ color: '#fff', fontSize: '1.5rem', fontWeight: 'bold' }}>
-                          {selectedPlayer.winRate.toFixed(1)}%
+                          {selectedPlayer?.winRate?.toFixed(1)}%
                         </div>
                         <div style={{ color: '#888', fontSize: '0.9rem' }}>Win Rate</div>
                       </div>
@@ -6026,7 +6028,7 @@ const PaymentConfirmationModal = ({
                   fontSize: '1.1rem',
                   fontWeight: 'bold'
                 }}>
-                  {request.amount.toFixed(2)} sol
+                  {request?.amount?.toFixed(2)} sol
                 </div>
               </div>
             </div>

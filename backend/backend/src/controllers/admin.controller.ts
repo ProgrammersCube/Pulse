@@ -57,9 +57,35 @@ function testEncryption() {
 /// updateSettingss()
 // Generate JWT token
 const generateToken = (id: string): string => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'secret', {
+  return jwt.sign({ id }, process.env.JWT_SECRET as string , {
     expiresIn: '7d'
   });
+};
+
+// JWT Secret validation endpoint
+export const checkJWTSecret = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      res.status(503).json({
+        success: false,
+        message: 'JWT_SECRET not configured in environment variables',
+        required: ['JWT_SECRET']
+      });
+      return;
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: 'JWT_SECRET is properly configured'
+    });
+  } catch (error) {
+    console.error('JWT Secret check error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Health check failed'
+    });
+  }
 };
 
 // Admin login
@@ -119,16 +145,11 @@ try {
         res.status(401).json({ success: false, message: 'Invalid  user name' });
         return;
       }
-      if(ambassadar?.password!=password)
-      {
-         res.status(401).json({ success: false, message: 'Invalid  password' });
+      const isMatch = await ambassadar.comparePasswords(password);
+      if (!isMatch) {
+        res.status(401).json({ success: false, message: 'Invalid password'});
         return;
       }
-      // const isMatch = await ambassadar.comparePasswords(password);
-      // if (!isMatch) {
-      //   res.status(401).json({ success: false, message: 'Invalid password credentials' });
-      //   return;
-      // }
       
       // Update last login
       ambassadar.lastLogin = new Date();
@@ -1266,15 +1287,9 @@ export const getNetRevenueAnalytics = async (req: Request, res: Response): Promi
 export const createAmbassador = async (req: Request, res: Response): Promise<void> => {
   try {
     const { walletAddress, ambassadorCode, commissionPercentage, username, password } = req.body;
-    
+  
     // Check if user exists
-    let user = await User.findOne({ walletAddress });
-
-    // if (!user) {
-    //   res.status(404).json({ success: false, message: 'User not found' });
-    //   return;
-    // }
-    
+    let user = await User.findOne({ walletAddress });    
     // Check if already ambassador
     const existing = await Ambassador.findOne({ username });
     if (existing) {
@@ -2513,7 +2528,6 @@ export const getApprovedPayoutRequests = async (req: Request, res: Response): Pr
 export const processPayment = async (req: Request, res: Response): Promise<void> => {
   try {
     const { requestId } = req.body;
-
     if (!requestId) {
       res.status(400).json({ 
         success: false, 
@@ -2521,7 +2535,11 @@ export const processPayment = async (req: Request, res: Response): Promise<void>
       });
       return;
     }
-
+    res.status(401).json({
+      success: false,
+      message: 'Payout Execution is currently disabled'
+    });
+    return;
     // Find the payout request
     const payoutRequest = await PayoutRequest.findOne({ requestId });
     if (!payoutRequest) {
@@ -2533,7 +2551,7 @@ export const processPayment = async (req: Request, res: Response): Promise<void>
     }
 
     // Check if request is approved
-    if (payoutRequest.status !== PayoutRequestStatus.APPROVED) {
+    if (payoutRequest?.status !== PayoutRequestStatus.APPROVED) {
       res.status(400).json({ 
         success: false, 
         message: 'Only approved requests can be processed for payment' 
@@ -2543,7 +2561,7 @@ export const processPayment = async (req: Request, res: Response): Promise<void>
 
     // Get the active wallet from wallet rotation
     const settings = await Settings.findOne();
-    if (!settings || !settings.walletRotation || settings.walletRotation.length === 0) {
+    if (!settings || !settings?.walletRotation || settings?.walletRotation.length === 0) {
       res.status(500).json({ 
         success: false, 
         message: 'No wallet rotation configured' 
@@ -2552,21 +2570,19 @@ export const processPayment = async (req: Request, res: Response): Promise<void>
     }
 
     // Find the active wallet
-    const targetType = settings.walletRotationFallbackEnabled ? 'fallback' : 'primary';
-    const activeWallet = settings.walletRotation.find((wallet: any) => 
-      wallet.active === true && wallet.type === targetType
-    );
+    //uncomment below code when we are ready to process the payment
+    // const targetType = setting?.walletRotationFallbackEnabled ? 'fallback' : 'primary';
+    // const activeWallet = settings?.walletRotation.find((wallet: any) => 
+    //   wallet.active === true && wallet.type === targetType
+    // );
 
-    if (!activeWallet) {
-      res.status(500).json({ 
-        success: false, 
-        message: `No active ${targetType} wallet found` 
-      });
-      return;
-    }
-
-    console.log(`💰 Processing payment of ${payoutRequest.amount} to ${payoutRequest.payoutWalletAddress}`);
-    console.log(`🏦 Using active wallet: ${activeWallet.publicKey}`);
+    // if (!activeWallet) {
+    //   res.status(500).json({ 
+    //     success: false, 
+    //     message: `No active ${targetType} wallet found` 
+    //   });
+    //   return;
+    // }
     // Import blockchain service
     const { getBlockchainService } = await import('../services/blockchain.service');
     const blockchainService = getBlockchainService();
@@ -2576,69 +2592,69 @@ export const processPayment = async (req: Request, res: Response): Promise<void>
     const paymentToken = 'SOL';
 
     // Check wallet balance before attempting transfer
-    const walletBalance = await blockchainService.getRealBalance(activeWallet.publicKey, paymentToken);
-    const requiredAmount = payoutRequest.amount + 0.01; // Add 0.01 SOL for transaction fees
+    //uncomment below code when we are ready to process the payment
+    // const walletBalance = await blockchainService.getRealBalance(activeWallet?.publicKey, paymentToken);
+    // const requiredAmount = payoutRequest?.amount + 0.01; // Add 0.01 SOL for transaction fees
     
-    console.log(`💳 Wallet balance: ${walletBalance} ${paymentToken}`);
-    console.log(`💸 Required amount: ${requiredAmount} ${paymentToken} (${payoutRequest.amount} + 0.01 fees)`);
-    
-    if (walletBalance < requiredAmount) {
-      console.error(`❌ Insufficient balance. Wallet has ${walletBalance} ${paymentToken}, needs ${requiredAmount} ${paymentToken}`);
-      res.status(400).json({ 
-        success: false, 
-        message: `Insufficient balance. Active wallet has ${walletBalance} ${paymentToken}, needs ${requiredAmount} ${paymentToken} (${payoutRequest.amount} + 0.01 fees)`,
-        data: {
-          currentBalance: walletBalance,
-          requiredAmount: requiredAmount,
-          paymentAmount: payoutRequest.amount,
-          feeAmount: 0.01,
-          token: paymentToken,
-          walletAddress: activeWallet.publicKey
-        }
-      });
-      return;
-    }
+    // if (walletBalance < requiredAmount) {
+    //   console.error(`❌ Insufficient balance. Wallet has ${walletBalance} ${paymentToken}, needs ${requiredAmount} ${paymentToken}`);
+    //   res.status(400).json({ 
+    //     success: false, 
+    //     message: `Insufficient balance. Active wallet has ${walletBalance} ${paymentToken}, needs ${requiredAmount} ${paymentToken} (${payoutRequest.amount} + 0.01 fees)`,
+    //     data: {
+    //       currentBalance: walletBalance,
+    //       requiredAmount: requiredAmount,
+    //       paymentAmount: payoutRequest?.amount,
+    //       feeAmount: 0.01,
+    //       token: paymentToken,
+    //       walletAddress: activeWallet?.publicKey
+    //     }
+    //   });
+    //   return;
+    // }
 
-    // Execute the blockchain transfer
-    const transferResult = await blockchainService.transferFromHouse(
-      payoutRequest.payoutWalletAddress,
-      payoutRequest.amount,
-      paymentToken
-    );
+    // Execute the blockchain transfer 
+    //uncomment below code when we are ready to process the payment
+    // const transferResult = await blockchainService.transferFromHouse(
+    //   payoutRequest?.payoutWalletAddress,
+    //   payoutRequest?.amount,
+    //   paymentToken
+    // );
 
-    if (!transferResult.success) {
-      console.error('❌ Payment transfer failed:', transferResult.error);
-      res.status(500).json({ 
-        success: false, 
-        message: `Payment transfer failed: ${transferResult.error}` 
-      });
-      return;
-    }
+    // if (!transferResult.success) {
+    //   console.error('❌ Payment transfer failed:', transferResult.error);
+    //   res.status(500).json({ 
+    //     success: false, 
+    //     message: `Payment transfer failed: ${transferResult.error}` 
+    //   });
+    //   return;
+    // }
 
     // Update the request status to completed with real transaction hash
-    payoutRequest.status = PayoutRequestStatus.COMPLETED;
-    payoutRequest.processedAt = new Date();
-    payoutRequest.processedBy = (req as any).admin?.username || 'admin';
-    payoutRequest.transactionHash = transferResult.signature || `TXN_${Date.now()}_${requestId}`;
+    //uncomment below code when we are ready to process the payment
+    // payoutRequest.status = PayoutRequestStatus.COMPLETED;
+    // payoutRequest.processedAt = new Date();
+    // payoutRequest.processedBy = (req as any).admin?.username || 'admin';
+    // payoutRequest.transactionHash = transferResult.signature || `TXN_${Date.now()}_${requestId}`;
 
-    await payoutRequest.save();
+    // await payoutRequest.save();
 
-    console.log(`✅ Payment processed successfully: ${transferResult.signature}`);
+    // console.log(`✅ Payment processed successfully: ${transferResult.signature}`);
 
-    res.status(200).json({ 
-      success: true, 
-      message: 'Payment processed successfully',
-      data: {
-        requestId: payoutRequest.requestId,
-        status: payoutRequest.status,
-        processedAt: payoutRequest.processedAt,
-        transactionHash: payoutRequest.transactionHash,
-        amount: payoutRequest.amount,
-        token: paymentToken,
-        recipientWallet: payoutRequest.payoutWalletAddress,
-        fromWallet: activeWallet.publicKey
-      }
-    });
+    // res.status(200).json({ 
+    //   success: true, 
+    //   message: 'Payment processed successfully',
+    //   data: {
+    //     requestId: payoutRequest.requestId,
+    //     status: payoutRequest.status,
+    //     processedAt: payoutRequest.processedAt,
+    //     transactionHash: payoutRequest.transactionHash,
+    //     amount: payoutRequest.amount,
+    //     token: paymentToken,
+    //     recipientWallet: payoutRequest.payoutWalletAddress,
+    //     fromWallet: activeWallet.publicKey
+    //   }
+    // });
 
   } catch (error) {
     console.error('Process payment error:', error);

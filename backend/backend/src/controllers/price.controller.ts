@@ -5,6 +5,10 @@ import { getPythPriceManager } from '../services/price.service'; // Updated impo
 // Get current BTC price
 export const getCurrentPrice = async (req: Request, res: Response) => {
   try {
+    if(!process.env.JWT_SECRET) {
+      res.status(401).json({ success: false, message: 'JWT_SECRET must be defined in .env file' });
+      return;
+    }
     const priceManager = getPythPriceManager(); // Updated function name
     const btcPrice = priceManager.getLatestPrice('BTC');
     
