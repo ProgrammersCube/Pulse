@@ -134,9 +134,9 @@ export const JWTSecretProvider = ({ children }) => {
   }, []);
 
   // Show loading screen while checking
-  if (checking) {
-    return <JWTLoadingScreen />;
-  }
+  // if (checking) {
+  //   return <JWTLoadingScreen />;
+  // }
 
   // Show error screen if JWT_SECRET is invalid/missing
   if (!jwtValid || error) {
