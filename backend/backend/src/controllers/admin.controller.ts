@@ -8,53 +8,8 @@ import Bet from '../models/bet.model';
 import PayoutRequest, { PayoutRequestStatus } from '../models/payoutRequest.model';
 import CryptoJS from "crypto-js";
 import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
-
+import bcrypt from 'bcryptjs';
 const connection = new Connection(clusterApiUrl("mainnet-beta"));
-async function updateSettingss(){
-  await Settings.updateOne(
-  {},
-  {
-    $push: {
-      walletRotation: {
-        publicKey: "0x21312321",
-        privateKey: "U2FsdGVkX1+mclFXO9wxJ+jw9Tu3oJGY2/pcSzlJVfw=",
-        type: "primary",
-        tokens: { BeTyche: 5000, SOL: 2 },
-
-      }
-    }
-  }
-);
-}
-
-// Test function to verify encryption/decryption
-function testEncryption() {
-  try {
-    const testData = "test-private-key-data";
-    const SERVER_SHARED_SECRET = process.env.SHARED_SECRET_For_PRIVATE_KEY || "fallback-secret";
-    
-    console.log('🧪 Testing encryption/decryption...');
-    console.log('Original data:', testData);
-    
-    const encrypted = CryptoJS.AES.encrypt(testData, SERVER_SHARED_SECRET).toString();
-    console.log('Encrypted:', encrypted.substring(0, 20) + '...');
-    
-    const decrypted = CryptoJS.AES.decrypt(encrypted, SERVER_SHARED_SECRET).toString(CryptoJS.enc.Utf8);
-    console.log('Decrypted:', decrypted);
-    
-    if (decrypted === testData) {
-      console.log('✅ Encryption/decryption test passed!');
-    } else {
-      console.log('❌ Encryption/decryption test failed!');
-    }
-  } catch (error) {
-    console.error('❌ Encryption test error:', error);
-  }
-}
-
-// Uncomment the line below to test encryption when starting the server
-// testEncryption();
-/// updateSettingss()
 // Generate JWT token
 const generateToken = (id: string): string => {
   return jwt.sign({ id }, process.env.JWT_SECRET as string , {
@@ -96,7 +51,6 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
       console.log('Admin login attempt:', username);
       // Find admin
       const admin = await Admin.findOne({ username });
-      console.log('Found admin:', admin);
       if (!admin) {
         res.status(401).json({ success: false, message: 'Invalid credentials' });
         return;
@@ -309,7 +263,6 @@ export const updateWalletRotation = async (req: any, res: any) => {
     
     // Note: We accept both initialized and uninitialized valid addresses
     // since new wallets won't be initialized until they receive their first transaction
-console.log(decryptWalletKey(privateKey))
     console.log('🔑 Adding wallet with:', {
       publicKey: publicKey.substring(0, 20) + '...',
       privateKeyLength: privateKey.length,
@@ -318,10 +271,11 @@ console.log(decryptWalletKey(privateKey))
 
     // Check if private key is already encrypted (starts with U2FsdGVkX1)
     if (privateKey.startsWith('U2FsdGVkX1')) {
-      console.log('⚠️ Private key appears to be already encrypted, attempting to decrypt...');
+      console.log('⚠️ Private key appears to be already encrypted, attempting to validate...');
       try {
-        const decryptedPrivateKey = decryptWalletKey(privateKey);
-        console.log('✅ Private key decrypted successfully',decryptedPrivateKey);
+        // Validate decryption works (but don't log the result)
+        decryptWalletKey(privateKey);
+        console.log('✅ Private key validation successful');
       } catch (decryptError) {
         console.error('❌ Failed to decrypt private key:', decryptError);
         return res.status(400).json({ 
@@ -338,6 +292,14 @@ console.log(decryptWalletKey(privateKey))
     // Encrypt the private key before storing (if it's not already encrypted)
     let encryptedPrivateKey = privateKey;
     if (!privateKey.startsWith('U2FsdGVkX1')) {
+      // Reject plaintext private keys in production
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Plaintext private keys are not allowed in production. Keys must be pre-encrypted with AES-256 (starting with U2FsdGVkX1).' 
+        });
+      }
+      
       try {
         const SERVER_SHARED_SECRET = process.env.SHARED_SECRET_For_PRIVATE_KEY;
         if (!SERVER_SHARED_SECRET) {
@@ -345,7 +307,7 @@ console.log(decryptWalletKey(privateKey))
         }
         
          encryptedPrivateKey = CryptoJS.AES.encrypt(privateKey, SERVER_SHARED_SECRET).toString();
-        console.log('✅ Private key encrypted successfully');
+        console.log('✅ Private key encrypted successfully (development mode)');
       } catch (encryptError) {
         console.error('❌ Failed to encrypt private key:', encryptError);
         return res.status(500).json({ 
@@ -560,209 +522,6 @@ export const getWalletBalances = async (req: any, res: any) => {
   }
 };
 
-// Debug endpoint to inspect wallet data without processing private key
-export const getWalletDebug = async (req: any, res: any) => {
-  try {
-    const { walletId } = req.params;
-    console.log('🔍 Debug: Inspecting wallet:', walletId);
-    
-    // Get wallet details from settings
-    const settings = await Settings.findOne();
-    if (!settings) {
-      return res.status(404).json({ success: false, message: "Settings not found" });
-    }
-    
-    const wallet = settings.walletRotation.find((w: any) => w._id.toString() === walletId);
-    if (!wallet) {
-      return res.status(404).json({ success: false, message: "Wallet not found" });
-    }
-    
-    // Return wallet data for inspection (without processing private key)
-    res.status(200).json({
-      success: true,
-      data: {
-        walletId,
-        publicKey: wallet.publicKey,
-        type: wallet.type,
-        active: wallet.active,
-        debug: {
-          privateKeyLength: wallet.privateKey?.length,
-          isEncrypted: wallet.privateKey?.startsWith('U2FsdGVkX1'),
-          privateKeyType: typeof wallet.privateKey,
-          privateKeyStartsWith: wallet.privateKey ? wallet.privateKey.substring(0, 30) + '...' : 'N/A',
-          privateKeyEndsWith: wallet.privateKey && wallet.privateKey.length > 10 ? '...' + wallet.privateKey.substring(wallet.privateKey.length - 10) : 'N/A',
-          hasPrivateKey: !!wallet.privateKey
-        }
-      }
-    });
-    
-  } catch (error) {
-    console.error("❌ Get wallet debug error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-
-// Regenerate encrypted private key for a wallet
-export const regenerateWalletPrivateKey = async (req: any, res: any) => {
-  try {
-    const { walletId } = req.params;
-    const { newPrivateKey } = req.body;
-    
-    console.log('🔄 Regenerating private key for wallet:', walletId);
-    
-    if (!newPrivateKey) {
-      return res.status(400).json({ success: false, message: "New private key is required" });
-    }
-    
-    // Get wallet details from settings
-    const settings = await Settings.findOne();
-    if (!settings) {
-      return res.status(404).json({ success: false, message: "Settings not found" });
-    }
-    
-    const walletIndex = settings.walletRotation.findIndex((w: any) => w._id.toString() === walletId);
-    if (walletIndex === -1) {
-      return res.status(404).json({ success: false, message: "Wallet not found" });
-    }
-    
-    // Encrypt the new private key
-    const SERVER_SHARED_SECRET = process.env.SHARED_SECRET_For_PRIVATE_KEY;
-    if (!SERVER_SHARED_SECRET) {
-      return res.status(500).json({ success: false, message: "Server configuration error" });
-    }
-    
-    const encryptedPrivateKey = CryptoJS.AES.encrypt(newPrivateKey, SERVER_SHARED_SECRET).toString();
-    
-    // Update the wallet with new encrypted private key
-    settings.walletRotation[walletIndex].privateKey = encryptedPrivateKey;
-    
-    await settings.save();
-    
-    console.log('✅ Private key regenerated successfully for wallet:', walletId);
-    
-    res.status(200).json({
-      success: true,
-      message: "Private key regenerated successfully",
-      data: {
-        walletId,
-        publicKey: settings.walletRotation[walletIndex].publicKey,
-        privateKeyLength: encryptedPrivateKey.length,
-        isEncrypted: true
-      }
-    });
-  } catch (error) {
-    console.error("❌ Regenerate private key error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to regenerate private key",
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-};
-
-// Test private key decryption (debug endpoint)
-export const testPrivateKeyDecryption = async (req: any, res: any) => {
-  try {
-    const { walletId } = req.params;
-    
-    console.log('🧪 Testing private key decryption for wallet:', walletId);
-    
-    // Get wallet details from settings
-    const settings = await Settings.findOne();
-    if (!settings) {
-      return res.status(404).json({ success: false, message: "Settings not found" });
-    }
-    
-    const wallet = settings.walletRotation.find((w: any) => w._id.toString() === walletId);
-    if (!wallet) {
-      return res.status(404).json({ success: false, message: "Wallet not found" });
-    }
-    
-    if (!wallet.privateKey) {
-      return res.status(400).json({ success: false, message: "No private key found" });
-    }
-    
-    // Test decryption
-    const SERVER_SHARED_SECRET = process.env.SHARED_SECRET_For_PRIVATE_KEY;
-    if (!SERVER_SHARED_SECRET) {
-      return res.status(500).json({ success: false, message: "Server configuration error" });
-    }
-    
-    try {
-      const bytes = CryptoJS.AES.decrypt(wallet.privateKey, SERVER_SHARED_SECRET);
-      
-      if (!bytes || bytes.sigBytes <= 0) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Decryption failed - invalid data",
-          debug: { sigBytes: bytes?.sigBytes }
-        });
-      }
-      
-      // Try different encodings
-      let utf8Result = null;
-      let hexResult = null;
-      let base64Result = null;
-      
-      try {
-        utf8Result = bytes.toString(CryptoJS.enc.Utf8);
-      } catch (e) {
-        console.log('UTF-8 conversion failed');
-      }
-      
-      try {
-        hexResult = bytes.toString(CryptoJS.enc.Hex);
-      } catch (e) {
-        console.log('Hex conversion failed');
-      }
-      
-      try {
-        base64Result = bytes.toString(CryptoJS.enc.Base64);
-      } catch (e) {
-        console.log('Base64 conversion failed');
-      }
-      
-      res.status(200).json({
-        success: true,
-        data: {
-          walletId,
-          publicKey: wallet.publicKey,
-          privateKeyLength: wallet.privateKey.length,
-          isEncrypted: wallet.privateKey.startsWith('U2FsdGVkX1'),
-          decryptionResults: {
-            sigBytes: bytes.sigBytes,
-            utf8: utf8Result ? {
-              length: utf8Result.length,
-              preview: utf8Result.substring(0, 100) + '...',
-              isValidJson: utf8Result.startsWith('[') && utf8Result.endsWith(']'),
-              isValidBase58: utf8Result.length >= 80 && utf8Result.length <= 90
-            } : null,
-            hex: hexResult ? {
-              length: hexResult.length,
-              preview: hexResult.substring(0, 100) + '...',
-              isValidHex: /^[0-9a-fA-F]+$/.test(hexResult)
-            } : null,
-            base64: base64Result ? {
-              length: base64Result.length,
-              preview: base64Result.substring(0, 100) + '...'
-            } : null
-          }
-        }
-      });
-      
-    } catch (decryptError) {
-      res.status(400).json({
-        success: false,
-        message: "Decryption failed",
-        error: decryptError instanceof Error ? decryptError.message : 'Unknown error'
-      });
-    }
-    
-  } catch (error) {
-    console.error("❌ Test private key decryption error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-};
 // Update settings
 export const updateSettings = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -1475,7 +1234,7 @@ export const getAmbassadors = async (req: Request, res: Response): Promise<void>
 export const updateAmbassador = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { walletAddress, password, ambassadorCode, commissionPercentage, payoutWalletAddress } = req.body;
+    const { walletAddress, ambassadorCode, commissionPercentage, payoutWalletAddress } = req.body;
     console.log(req.body);
     // Validate required fields
     if (!walletAddress || !ambassadorCode || commissionPercentage === undefined) {
@@ -1500,17 +1259,12 @@ export const updateAmbassador = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    // Prepare update data
     const updateData: any = {
-      password,
       walletAddress,
       ambassadorCode: ambassadorCode.toUpperCase(),
       commissionPercentage: parseFloat(commissionPercentage),
       payoutWalletAddress: payoutWalletAddress || ''
     };
-
-    
-
     // Update ambassador
     const updatedAmbassador = await Ambassador.findByIdAndUpdate(
       id,
@@ -1601,7 +1355,7 @@ export const ambassadarChangePassword = async (req: any, res: any) => {
   try {
     const { currentPassword, newPassword, confirmPassword } = req.body;
     const ambassador = req.ambassador; // From ambassadorAuth middleware
-    console.log(ambassador);
+    
     // Validate input
     if (!currentPassword || !newPassword || !confirmPassword) {
       return res.status(400).json({ 
@@ -1625,16 +1379,14 @@ export const ambassadarChangePassword = async (req: any, res: any) => {
         message: 'New password must be at least 6 characters long' 
       });
     }
-    
-    // Verify current password
-    if (ambassador.password !== currentPassword) {
+    const isMatch = await bcrypt.compare(currentPassword, ambassador.password);
+    if (!isMatch) {
       return res.status(400).json({ 
         success: false, 
         message: 'Current password is incorrect' 
       });
     }
     const generateNewToken = generateToken((ambassador as any)._id.toString());
-    // Update password
     ambassador.password = newPassword;
     await ambassador.save();
     
@@ -2535,11 +2287,16 @@ export const processPayment = async (req: Request, res: Response): Promise<void>
       });
       return;
     }
-    res.status(401).json({
-      success: false,
-      message: 'Payout Execution is currently disabled'
-    });
-    return;
+
+    // Check if ambassador payouts are enabled via environment variable
+    const payoutsEnabled = process.env.AMBASSADOR_PAYOUTS_ENABLED === 'true';
+    if (!payoutsEnabled) {
+      res.status(403).json({
+        success: false,
+        message: 'Ambassador payouts are currently disabled. Contact system administrator to enable.'
+      });
+      return;
+    }
     // Find the payout request
     const payoutRequest = await PayoutRequest.findOne({ requestId });
     if (!payoutRequest) {
@@ -2570,19 +2327,19 @@ export const processPayment = async (req: Request, res: Response): Promise<void>
     }
 
     // Find the active wallet
-    //uncomment below code when we are ready to process the payment
-    // const targetType = setting?.walletRotationFallbackEnabled ? 'fallback' : 'primary';
-    // const activeWallet = settings?.walletRotation.find((wallet: any) => 
-    //   wallet.active === true && wallet.type === targetType
-    // );
+    const targetType = settings?.walletRotationFallbackEnabled ? 'fallback' : 'primary';
+    const activeWallet = settings?.walletRotation.find((wallet: any) => 
+      wallet.active === true && wallet.type === targetType
+    );
 
-    // if (!activeWallet) {
-    //   res.status(500).json({ 
-    //     success: false, 
-    //     message: `No active ${targetType} wallet found` 
-    //   });
-    //   return;
-    // }
+    if (!activeWallet) {
+      res.status(500).json({ 
+        success: false, 
+        message: `No active ${targetType} wallet found` 
+      });
+      return;
+    }
+    
     // Import blockchain service
     const { getBlockchainService } = await import('../services/blockchain.service');
     const blockchainService = getBlockchainService();
@@ -2592,69 +2349,66 @@ export const processPayment = async (req: Request, res: Response): Promise<void>
     const paymentToken = 'SOL';
 
     // Check wallet balance before attempting transfer
-    //uncomment below code when we are ready to process the payment
-    // const walletBalance = await blockchainService.getRealBalance(activeWallet?.publicKey, paymentToken);
-    // const requiredAmount = payoutRequest?.amount + 0.01; // Add 0.01 SOL for transaction fees
+    const walletBalance = await blockchainService.getRealBalance(activeWallet?.publicKey, paymentToken);
+    const requiredAmount = payoutRequest?.amount + 0.01; // Add 0.01 SOL for transaction fees
     
-    // if (walletBalance < requiredAmount) {
-    //   console.error(`❌ Insufficient balance. Wallet has ${walletBalance} ${paymentToken}, needs ${requiredAmount} ${paymentToken}`);
-    //   res.status(400).json({ 
-    //     success: false, 
-    //     message: `Insufficient balance. Active wallet has ${walletBalance} ${paymentToken}, needs ${requiredAmount} ${paymentToken} (${payoutRequest.amount} + 0.01 fees)`,
-    //     data: {
-    //       currentBalance: walletBalance,
-    //       requiredAmount: requiredAmount,
-    //       paymentAmount: payoutRequest?.amount,
-    //       feeAmount: 0.01,
-    //       token: paymentToken,
-    //       walletAddress: activeWallet?.publicKey
-    //     }
-    //   });
-    //   return;
-    // }
+    if (walletBalance < requiredAmount) {
+      console.error(`❌ Insufficient balance. Wallet has ${walletBalance} ${paymentToken}, needs ${requiredAmount} ${paymentToken}`);
+      res.status(400).json({ 
+        success: false, 
+        message: `Insufficient balance. Active wallet has ${walletBalance} ${paymentToken}, needs ${requiredAmount} ${paymentToken} (${payoutRequest.amount} + 0.01 fees)`,
+        data: {
+          currentBalance: walletBalance,
+          requiredAmount: requiredAmount,
+          paymentAmount: payoutRequest?.amount,
+          feeAmount: 0.01,
+          token: paymentToken,
+          walletAddress: activeWallet?.publicKey
+        }
+      });
+      return;
+    }
 
     // Execute the blockchain transfer 
-    //uncomment below code when we are ready to process the payment
-    // const transferResult = await blockchainService.transferFromHouse(
-    //   payoutRequest?.payoutWalletAddress,
-    //   payoutRequest?.amount,
-    //   paymentToken
-    // );
+    const transferResult = await blockchainService.transferFromHouse(
+      payoutRequest?.payoutWalletAddress,
+      payoutRequest?.amount,
+      paymentToken
+    );
 
-    // if (!transferResult.success) {
-    //   console.error('❌ Payment transfer failed:', transferResult.error);
-    //   res.status(500).json({ 
-    //     success: false, 
-    //     message: `Payment transfer failed: ${transferResult.error}` 
-    //   });
-    //   return;
-    // }
+    if (!transferResult.success) {
+      console.error('❌ Payment transfer failed:', transferResult.error);
+      res.status(500).json({ 
+        success: false, 
+        message: `Payment transfer failed: ${transferResult.error}` 
+      });
+      return;
+    }
 
     // Update the request status to completed with real transaction hash
-    //uncomment below code when we are ready to process the payment
-    // payoutRequest.status = PayoutRequestStatus.COMPLETED;
-    // payoutRequest.processedAt = new Date();
-    // payoutRequest.processedBy = (req as any).admin?.username || 'admin';
-    // payoutRequest.transactionHash = transferResult.signature || `TXN_${Date.now()}_${requestId}`;
+    payoutRequest.status = PayoutRequestStatus.COMPLETED;
+    payoutRequest.processedAt = new Date();
+    payoutRequest.processedBy = (req as any).admin?.username || 'admin';
+    payoutRequest.transactionHash = transferResult.signature || `TXN_${Date.now()}_${requestId}`;
 
-    // await payoutRequest.save();
+    await payoutRequest.save();
 
-    // console.log(`✅ Payment processed successfully: ${transferResult.signature}`);
+    console.log(`✅ Payment processed successfully: ${transferResult.signature}`);
 
-    // res.status(200).json({ 
-    //   success: true, 
-    //   message: 'Payment processed successfully',
-    //   data: {
-    //     requestId: payoutRequest.requestId,
-    //     status: payoutRequest.status,
-    //     processedAt: payoutRequest.processedAt,
-    //     transactionHash: payoutRequest.transactionHash,
-    //     amount: payoutRequest.amount,
-    //     token: paymentToken,
-    //     recipientWallet: payoutRequest.payoutWalletAddress,
-    //     fromWallet: activeWallet.publicKey
-    //   }
-    // });
+    res.status(200).json({ 
+      success: true, 
+      message: 'Payment processed successfully',
+      data: {
+        requestId: payoutRequest.requestId,
+        status: payoutRequest.status,
+        processedAt: payoutRequest.processedAt,
+        transactionHash: payoutRequest.transactionHash,
+        amount: payoutRequest.amount,
+        token: paymentToken,
+        recipientWallet: payoutRequest.payoutWalletAddress,
+        fromWallet: activeWallet.publicKey
+      }
+    });
 
   } catch (error) {
     console.error('Process payment error:', error);
@@ -3065,7 +2819,6 @@ export const changeUserPassword = async (req: Request, res: Response): Promise<v
       });
       return;
     }
-    
     // Update password
     user.password = newPassword;
     await user.save();

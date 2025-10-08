@@ -2,7 +2,6 @@ import { Key, Lock, RotateCw, Bell, AlertTriangle, Check } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import CryptoJS from "crypto-js";
 import { styles } from '../styles/Admin-dashbaord.styles.js';
 import { 
   TrendingUp, TrendingDown, Users, DollarSign, Activity, 
@@ -13,7 +12,6 @@ import {
 } from 'lucide-react';
 // Treasury Management Component
 const API_URL = process.env.REACT_APP_API_URL
-const SERVER_SHARED_SECRET = "TOCqSdgbsDo"; // Ideally fetched securely
 const TreasuryManagement = () => {
   const [treasury, setTreasury] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('adminToken'));
@@ -216,9 +214,7 @@ const TreasuryManagement = () => {
       setLoading(false);
     }
   };
-function encryptWalletKey(walletPrivateKey) {
-return CryptoJS.AES.encrypt(walletPrivateKey, SERVER_SHARED_SECRET).toString();
-}
+
   // Enhanced Solana address validation function
   const validateSolanaAddress = (address) => {
     // Basic format checks
@@ -351,13 +347,10 @@ return CryptoJS.AES.encrypt(walletPrivateKey, SERVER_SHARED_SECRET).toString();
         }
       }
       
-      const encrypted = encryptWalletKey(privateKeyToEncrypt);
-      console.log('Encrypted private key:', encrypted);
-      console.log('Wallet data to send:', {...newWallet, privateKey: encrypted});
-      
+      // Send plaintext private key to backend - backend will encrypt it securely
       const res = await adminApi.put("/update-wallet-rotation", {
         ...newWallet, 
-        privateKey: encrypted
+        privateKey: privateKeyToEncrypt
       });
       
       console.log('API Response:', res?.data);
@@ -1089,9 +1082,9 @@ return CryptoJS.AES.encrypt(walletPrivateKey, SERVER_SHARED_SECRET).toString();
           fontSize: '0.875rem',
           color: 'rgba(255, 255, 255, 0.7)'
         }}>
-          <strong>Security Note:</strong> Private keys are encrypted using AES-256 immediately upon submission 
-          and never stored in plaintext. They are only decrypted in memory during transaction signing and 
-          immediately purged after use.
+          <strong>Security Note:</strong> Private keys are transmitted over HTTPS and encrypted using AES-256 
+          on the backend server before database storage. They are never stored in plaintext. Keys are only 
+          decrypted in memory during transaction signing and immediately purged after use.
         </div>
       </motion.div>
 

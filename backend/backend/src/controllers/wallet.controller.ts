@@ -131,7 +131,6 @@ export const getOrCreateUser = async (req: Request, res: Response): Promise<void
         },
         lastActive: new Date()
       });
-      console.log('✅ New user created:', user)
     }
 
     // Get REAL balances from blockchain
@@ -523,7 +522,14 @@ export const createPulseAccount = async (req: any, res: any) => {
         message: `This wallet address already exists in existing user ${existingUser._id}`
       });
     }
-
+    //check  username exists then through error
+    const existingUsername = await User.findOne({ userName });
+    if (existingUsername) {
+      return res.status(400).json({ 
+        success: false,
+        message: `This username already exists in existing user ${existingUsername?._id}`
+      });
+    }
     // Look for an existing guest with this walletAddress
     let user = await User.findOne({
       loginType: "guest",
@@ -630,66 +636,185 @@ export const sendResetOtpCode = async (req: Request, res: Response) => {
 export const verifyResetOtpCode = async (req: any, res: any) => {
   try {
     const { email, otp } = req.body;
-    console.log(email,otp)
+    
     if (!email || !otp) {
-      return res.status(400).json({ message: "Email and OTP are required" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Email and OTP are required" 
+      });
     }
 
     // Find user by email
-    const user = await User.findOne({ userName:email });
+    const user = await User.findOne({ userName: email });
 
     if (!user) {
-      return res.status(404).json({ success:false,message: "User not found" });
+      return res.status(404).json({ 
+        success: false,
+        message: "User not found" 
+      });
     }
-    console.log(user.resetotpCode)
+    
     // Check OTP
-    if (
-      user.resetotpCode !== otp 
-    ) {
-      return res.status(400).json({ success:false,message: "Invalid or expired OTP" });
+    if (!user.resetotpCode || user.resetotpCode !== otp) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid or expired OTP" 
+      });
     }
 
-    // ✅ OTP Verified
-    // (Optional: clear OTP after verification so it can't be reused)
-    user.resetotpCode = undefined;
-    // user.resetOtpExpiry = undefined;
-    await user.save();
-
-    return res.status(200).json({ success:true,message: "OTP verified successfully" });
+    // ✅ OTP Verified - Don't clear it yet, user needs it for resetPassword
+    return res.status(200).json({ 
+      success: true,
+      message: "OTP verified successfully. You can now reset your password." 
+    });
   } catch (error) {
     console.error("Error verifying OTP:", error);
-    res.status(500).json({ success:false,message: "Something went wrong" });
+    res.status(500).json({ 
+      success: false,
+      message: "Something went wrong" 
+    });
   }
 };
+// Reset password with OTP verification (for forgot password flow)
 export const resetPassword = async (req: Request, res: Response) => {
   try {
-    const { email, newPassword } = req.body;
+    const { email, otp, newPassword, confirmPassword } = req.body;
 
-    if (!email || !newPassword) {
-      return res.status(400).json({ message: "Email and new password are required" });
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Email, OTP, and new password are required" 
+      });
+    }
+
+    if (confirmPassword && newPassword !== confirmPassword) {
+      return res.status(400).json({ 
+        success: false,
+        message: "New password and confirm password do not match" 
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Password must be at least 6 characters long" 
+      });
+    }
+
+    // Find user by email
+    const user = await User.findOne({ userName: email });
+
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: "User not found" 
+      });
+    }
+
+    // Verify OTP
+    if (!user.resetotpCode || user.resetotpCode !== otp) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid or expired OTP" 
+      });
+    }
+
+    // Update password (pre-save hook will hash it automatically)
+    user.password = newPassword;
+    user.resetotpCode = undefined; // Clear OTP after successful reset
+    await user.save();
+
+    res.status(200).json({ 
+      success: true,
+      message: "Password reset successfully" 
+    });
+  } catch (error) {
+    console.error("Error resetting password:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Something went wrong" 
+    });
+  }
+};
+
+// Change password for authenticated users (requires current password)
+export const changePassword = async (req: any, res: Response) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+    const userId = req.user?.id; // From pulseUserAuth middleware
+
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Authentication required' 
+      });
+    }
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Current password, new password, and confirm password are required' 
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'New password and confirm password do not match' 
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'New password must be at least 6 characters long' 
+      });
     }
 
     // Find user
-    const user = await User.findOne({ userName:email });
-
+    const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
     }
 
-    // Hash new password
-    // const hashedPassword = await bcrypt.hash(newPassword, 10);
+    // Check if user has a password set
+    if (!user.password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No password set for this account' 
+      });
+    }
 
-    // Update password & clear OTP fields
+    // Verify current password using bcrypt
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Current password is incorrect' 
+      });
+    }
+
+    // Update password (pre-save hook will hash it automatically)
     user.password = newPassword;
-    // user.resetOtpCode = undefined;
-    // user.resetOtpExpiry = undefined;
-
     await user.save();
 
-    res.status(200).json({ success:true,message: "Password reset successfully" });
+    // Generate new token for security (invalidate old sessions)
+    const newToken = generateToken((user as any)._id.toString());
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Password changed successfully',
+      token: newToken
+    });
   } catch (error) {
-    console.error("Error resetting password:", error);
-    res.status(500).json({ success:false,message: "Something went wrong" });
+    console.error('Change password error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error' 
+    });
   }
 };
 export const pulseLogin=async(req:any,res:any)=>
@@ -697,7 +822,6 @@ export const pulseLogin=async(req:any,res:any)=>
    try {
         const { userName, password } = req.body;
         const user = await User.findOne({ userName});
-        console.log('Found user:', user);
         if (!user) {
           res.status(401).json({ success: false, message: 'Invalid username' });
           return;

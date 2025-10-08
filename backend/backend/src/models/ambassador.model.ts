@@ -102,7 +102,6 @@ ambassadorSchema.pre('save', async function(next) {
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
-    console.log(this.password);
     next();
   } catch (error: any) {
     next(error);
@@ -110,6 +109,6 @@ ambassadorSchema.pre('save', async function(next) {
 });
 // Compare password method
 ambassadorSchema.methods.comparePasswords = async function(candidatePassword: string): Promise<boolean> {
-  return bcrypt.compare(candidatePassword, this.password);
+  return await bcrypt.compare(candidatePassword, this.password);
 };
 export default mongoose.model<IAmbassador>('Ambassador', ambassadorSchema);

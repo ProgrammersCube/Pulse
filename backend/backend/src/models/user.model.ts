@@ -157,10 +157,7 @@ userSchema.pre('save', async function(next) {
   }
 });
 userSchema.methods.comparePassword = async function(candidatePassword: string): Promise<boolean> {
-  console.log(this.password);
-  console.log(candidatePassword);
-  console.log(await bcrypt.compare(candidatePassword, this.password));
-  return bcrypt.compare(candidatePassword, this.password);
+  return await bcrypt.compare(candidatePassword, this.password);
 };
 // Export the model
 const User =

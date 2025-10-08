@@ -7,7 +7,7 @@ import {
   Shield, Eye, EyeOff, LogIn, Plus, Trash2,
   Twitter, Instagram, MessageSquare, Smartphone, 
   Facebook, MessageCircle, Youtube, Link, Mail, Phone,
-  BarChart3, Target, DollarSign, Trophy, LogOut
+  BarChart3, Target, DollarSign, Trophy, LogOut, Key, X
 } from 'lucide-react';
 import { styles } from '../styles/PulseDashboard.styles';
 import { useAppKitAccount } from '@reown/appkit/react';
@@ -75,6 +75,22 @@ const PulseDashboard = () => {
     hasNextPage: false,
     hasPrevPage: false,
     limit: 20
+  });
+
+  // Change password modal state
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [changePasswordForm, setChangePasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+  const [changePasswordError, setChangePasswordError] = useState('');
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState('');
+  const [showPasswordFields, setShowPasswordFields] = useState({
+    current: false,
+    new: false,
+    confirm: false
   });
 
   // Initialize component
@@ -436,6 +452,88 @@ const PulseDashboard = () => {
     navigate('/pulse-auth');
   };
 
+  // Handle change password modal
+  const handleChangePasswordModalClose = () => {
+    setShowChangePasswordModal(false);
+    setChangePasswordForm({
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: ''
+    });
+    setChangePasswordError('');
+    setChangePasswordSuccess('');
+  };
+
+  // Handle change password
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setChangePasswordError('');
+    setChangePasswordSuccess('');
+
+    if (!changePasswordForm.currentPassword || !changePasswordForm.newPassword || !changePasswordForm.confirmPassword) {
+      setChangePasswordError('All fields are required');
+      return;
+    }
+
+    if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) {
+      setChangePasswordError('New password and confirm password do not match');
+      return;
+    }
+
+    if (changePasswordForm.newPassword.length < 6) {
+      setChangePasswordError('New password must be at least 6 characters long');
+      return;
+    }
+
+    try {
+      setChangePasswordLoading(true);
+      const token = localStorage.getItem('pulseToken');
+      
+      const response = await fetch(`${API_URL}api/wallet/pulse/change-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          currentPassword: changePasswordForm.currentPassword,
+          newPassword: changePasswordForm.newPassword,
+          confirmPassword: changePasswordForm.confirmPassword
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setChangePasswordSuccess('Password changed successfully!');
+        
+        // Update token in localStorage
+        if (data.token) {
+          localStorage.setItem('pulseToken', data.token);
+        }
+        
+        // Clear form
+        setChangePasswordForm({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+
+        // Close modal after 2 seconds
+        setTimeout(() => {
+          setShowChangePasswordModal(false);
+          setChangePasswordSuccess('');
+        }, 2000);
+      } else {
+        setChangePasswordError(data.message || 'Failed to change password');
+      }
+    } catch (error) {
+      setChangePasswordError(error.response?.data?.message || 'Failed to change password');
+    } finally {
+      setChangePasswordLoading(false);
+    }
+  };
+
   // Apply referral code function
   const handleApplyReferralCode = async () => {
     if (!referralCodeInput.trim()) {
@@ -696,6 +794,21 @@ const PulseDashboard = () => {
                 }} 
               />
               Refresh
+            </motion.button>
+            
+            <motion.button
+              onClick={() => setShowChangePasswordModal(true)}
+              style={{
+                ...styles.neonButton,
+                background: 'rgba(168, 85, 247, 0.1)',
+                border: '1px solid rgba(168, 85, 247, 0.3)',
+                color: '#a855f7'
+              }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <Key size={16} />
+              Change Password
             </motion.button>
             
             <motion.button
@@ -1548,6 +1661,276 @@ const PulseDashboard = () => {
           </div>
         </motion.div>
       </main>
+
+      {/* Change Password Modal */}
+      {showChangePasswordModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            style={{
+              background: 'linear-gradient(135deg, rgba(30, 30, 50, 0.95), rgba(20, 20, 35, 0.95))',
+              borderRadius: '20px',
+              border: '1px solid rgba(168, 85, 247, 0.3)',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+              padding: '2rem',
+              width: '90%',
+              maxWidth: '500px',
+              maxHeight: '90vh',
+              overflow: 'auto'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ 
+                fontSize: '1.5rem', 
+                fontWeight: '700', 
+                color: 'white',
+                margin: 0
+              }}>
+                Change Password
+              </h2>
+              <button
+                onClick={handleChangePasswordModalClose}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'rgba(255, 255, 255, 0.5)',
+                  cursor: 'pointer',
+                  padding: '0.5rem'
+                }}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {/* Current Password */}
+              <div>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.5rem', 
+                  fontSize: '0.875rem',
+                  color: 'rgba(255, 255, 255, 0.7)'
+                }}>
+                  Current Password
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPasswordFields.current ? 'text' : 'password'}
+                    value={changePasswordForm.currentPassword}
+                    onChange={(e) => setChangePasswordForm({...changePasswordForm, currentPassword: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem 2.5rem 0.75rem 0.75rem',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '10px',
+                      color: 'white',
+                      fontSize: '1rem',
+                      outline: 'none'
+                    }}
+                    placeholder="Enter current password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordFields(prev => ({ ...prev, current: !prev.current }))}
+                    style={{
+                      position: 'absolute',
+                      right: '0.75rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'rgba(255, 255, 255, 0.5)',
+                      cursor: 'pointer',
+                      padding: '0.25rem'
+                    }}
+                  >
+                    {showPasswordFields.current ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* New Password */}
+              <div>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.5rem', 
+                  fontSize: '0.875rem',
+                  color: 'rgba(255, 255, 255, 0.7)'
+                }}>
+                  New Password
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPasswordFields.new ? 'text' : 'password'}
+                    value={changePasswordForm.newPassword}
+                    onChange={(e) => setChangePasswordForm({...changePasswordForm, newPassword: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem 2.5rem 0.75rem 0.75rem',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '10px',
+                      color: 'white',
+                      fontSize: '1rem',
+                      outline: 'none'
+                    }}
+                    placeholder="Enter new password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordFields(prev => ({ ...prev, new: !prev.new }))}
+                    style={{
+                      position: 'absolute',
+                      right: '0.75rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'rgba(255, 255, 255, 0.5)',
+                      cursor: 'pointer',
+                      padding: '0.25rem'
+                    }}
+                  >
+                    {showPasswordFields.new ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm Password */}
+              <div>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.5rem', 
+                  fontSize: '0.875rem',
+                  color: 'rgba(255, 255, 255, 0.7)'
+                }}>
+                  Confirm New Password
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPasswordFields.confirm ? 'text' : 'password'}
+                    value={changePasswordForm.confirmPassword}
+                    onChange={(e) => setChangePasswordForm({...changePasswordForm, confirmPassword: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem 2.5rem 0.75rem 0.75rem',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '10px',
+                      color: 'white',
+                      fontSize: '1rem',
+                      outline: 'none'
+                    }}
+                    placeholder="Confirm new password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordFields(prev => ({ ...prev, confirm: !prev.confirm }))}
+                    style={{
+                      position: 'absolute',
+                      right: '0.75rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'rgba(255, 255, 255, 0.5)',
+                      cursor: 'pointer',
+                      padding: '0.25rem'
+                    }}
+                  >
+                    {showPasswordFields.confirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {changePasswordError && (
+                <div style={{
+                  padding: '0.75rem',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '10px',
+                  color: '#ef4444',
+                  fontSize: '0.875rem'
+                }}>
+                  {changePasswordError}
+                </div>
+              )}
+
+              {/* Success Message */}
+              {changePasswordSuccess && (
+                <div style={{
+                  padding: '0.75rem',
+                  background: 'rgba(34, 197, 94, 0.1)',
+                  border: '1px solid rgba(34, 197, 94, 0.3)',
+                  borderRadius: '10px',
+                  color: '#22c55e',
+                  fontSize: '0.875rem'
+                }}>
+                  {changePasswordSuccess}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                <button
+                  type="button"
+                  onClick={handleChangePasswordModalClose}
+                  style={{
+                    flex: 1,
+                    padding: '0.75rem',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '10px',
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={changePasswordLoading}
+                  style={{
+                    flex: 1,
+                    padding: '0.75rem',
+                    background: 'linear-gradient(135deg, #a855f7, #ec4899)',
+                    border: 'none',
+                    borderRadius: '10px',
+                    color: 'white',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    cursor: changePasswordLoading ? 'not-allowed' : 'pointer',
+                    opacity: changePasswordLoading ? 0.7 : 1
+                  }}
+                >
+                  {changePasswordLoading ? 'Changing...' : 'Change Password'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };

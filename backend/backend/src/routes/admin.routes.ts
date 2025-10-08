@@ -21,9 +21,6 @@ import {
   setActiveWallet,
   toggleWalletRotationFallback,
   getWalletBalances,
-  getWalletDebug,
-  regenerateWalletPrivateKey,
-  testPrivateKeyDecryption,
   getCurrentActiveWalletPublicKey,
   getFunnelAnalytics,
   requestCommissionPayout,
@@ -68,9 +65,6 @@ router.get("/settings/get-wallet-rotation",adminAuth,getWalletRotationWallets)
 router.put("/settings/setActiveWallet",adminAuth,setActiveWallet)
 router.post("/settings/wallet-rotation-toggle-fallback",adminAuth,toggleWalletRotationFallback)
 router.get('/treasury/wallet-balances/:walletId', adminAuth, getWalletBalances);
-router.get('/treasury/wallet-debug/:walletId', adminAuth, getWalletDebug);
-router.put('/treasury/regenerate-private-key/:walletId', adminAuth, regenerateWalletPrivateKey);
-router.get('/treasury/test-decryption/:walletId', adminAuth, testPrivateKeyDecryption);
 
 // Dashboard
 router.get('/dashboard/stats',adminAuth, getDashboardStats);

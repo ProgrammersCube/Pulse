@@ -1,5 +1,5 @@
 import express from 'express';
-import { getOrCreateUser,resetPassword,verifyResetOtpCode, updateTokenBalances, applyReferralCode,createPulseAccount,pulseLogin,sendResetOtpCode, cleanupUserWallets, getDashboardStats, deleteWallet, addWallet, getBetHistory, getReferralHistory, getDetailedReferralDashboard } from '../controllers/wallet.controller';
+import { getOrCreateUser,resetPassword,verifyResetOtpCode, updateTokenBalances, applyReferralCode,createPulseAccount,pulseLogin,sendResetOtpCode, cleanupUserWallets, getDashboardStats, deleteWallet, addWallet, getBetHistory, getReferralHistory, getDetailedReferralDashboard, changePassword } from '../controllers/wallet.controller';
 import { pulseUserAuth } from '../middleware/pulseUserAuth';
 
 const router = express.Router();
@@ -19,9 +19,12 @@ router.post('/:walletAddress/referral', asyncHandler(applyReferralCode));
 //create pulse account
 router.post("/pulse/create-pulse-account",asyncHandler(createPulseAccount))
 router.post("/pulse/pulse-login",asyncHandler(pulseLogin))
+// Forgot password flow (OTP-based)
 router.post("/reset/send-reset-password-otp",asyncHandler(sendResetOtpCode))
 router.post("/reset/verify-reset-password-otp",asyncHandler(verifyResetOtpCode))
 router.post("/reset/reset-password",asyncHandler(resetPassword))
+// Change password for authenticated users (requires current password)
+router.post("/pulse/change-password", pulseUserAuth, asyncHandler(changePassword))
 // ✅ Add cleanup route for fixing existing users with wallet issues
 router.post("/cleanup/wallets", asyncHandler(cleanupUserWallets));
 // Dashboard Stats route with authentication

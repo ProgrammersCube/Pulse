@@ -332,10 +332,12 @@ const PulseAccount = () => {
     }
     
     try {
-      // Replace with your actual API endpoint
+      const enteredOtp = otp.join('');
       const response = await pulseApi.post("/reset/reset-password", {
         email: resetEmail,
-        newPassword: resetForm.newPassword
+        otp: enteredOtp,
+        newPassword: resetForm.newPassword,
+        confirmPassword: resetForm.confirmNewPassword
       });
       
       if (response?.data?.success) {

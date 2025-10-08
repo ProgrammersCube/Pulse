@@ -1,9 +1,17 @@
 // THIS MUST BE THE VERY FIRST LINE
 import dotenv from 'dotenv';
 dotenv.config();
+
+// Validate JWT_SECRET
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
   console.error("❌ JWT_SECRET must be defined in .env file and at least 32 characters long");
-  process.exit(1); // stop the app from running
+  process.exit(1);
+}
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.SHARED_SECRET_For_PRIVATE_KEY || process.env.SHARED_SECRET_For_PRIVATE_KEY.length < 32) {
+    console.error("❌ SHARED_SECRET_For_PRIVATE_KEY must be defined in .env file and at least 32 characters long (production)");
+    process.exit(1);
+  }
 }
 import express, { Application } from 'express';
 import mongoose from 'mongoose';
@@ -98,8 +106,17 @@ mongoose
     console.log('✅ Connected to MongoDB');
     server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
-      console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
+      console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      
+      // Display CORS configuration
+      const allowedOrigin = process.env.NODE_ENV === 'production' 
+        ? process.env.FRONTEND_PRODUCTION_URL 
+        : 'http://localhost:3000';
+      console.log(`🔗 CORS/Socket.IO allowed origin: ${allowedOrigin}`);
+      
+      if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_PRODUCTION_URL) {
+        console.warn('⚠️  WARNING: FRONTEND_PRODUCTION_URL not set in production mode!');
+      }
       // seedAdmin()
       //createSettings()
     });

@@ -17,7 +17,6 @@ export const seedAdmin = async () => {
     });
     
     console.log('Admin created:', admin.username);
-    console.log('Admin created:', admin.password);
 
     process.exit(0);
   } catch (error) {

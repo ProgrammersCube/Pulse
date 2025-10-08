@@ -17,10 +17,19 @@ import {
   import CryptoJS from 'crypto-js';
 import bs58 from 'bs58';
 import { getActiveWalletKeys } from '../controllers/admin.controller';
+
+  // Debug logging flag - set to false in production
+  const DEBUG = process.env.NODE_ENV !== 'production';
+  
+  // Debug logger - only logs when DEBUG is enabled
+  const debugLog = (...args: any[]) => {
+    if (DEBUG) console.log(...args);
+  };
+  
   // Helper function to convert private key to proper format
   const convertPrivateKeyToUint8Array = (privateKey: string | number[]): Uint8Array => {
     try {
-      console.log('🔍 convertPrivateKeyToUint8Array called with:', {
+      debugLog('🔍 convertPrivateKeyToUint8Array called with:', {
         type: typeof privateKey,
         length: typeof privateKey === 'string' ? privateKey.length : privateKey.length,
         preview: typeof privateKey === 'string' ? privateKey.substring(0, 50) + '...' : 'Array'
@@ -28,7 +37,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
       
       if (Array.isArray(privateKey)) {
         // If it's already an array, convert to Uint8Array
-        console.log('✅ Input is already an array, converting to Uint8Array');
+        debugLog('✅ Input is already an array, converting to Uint8Array');
         return new Uint8Array(privateKey);
       }
       
@@ -38,51 +47,51 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
           try {
             const parsed = JSON.parse(privateKey);
             if (Array.isArray(parsed) && parsed.length === 64) {
-              console.log('✅ Parsed JSON array successfully, length:', parsed.length);
+              debugLog('✅ Parsed JSON array successfully, length:', parsed.length);
               return new Uint8Array(parsed);
             } else {
               throw new Error(`Invalid array format or length: ${parsed.length}, expected 64`);
             }
           } catch (parseError) {
-            console.log('⚠️ Failed to parse JSON array:', parseError);
+            debugLog('⚠️ Failed to parse JSON array:', parseError);
             throw new Error('Failed to parse JSON array');
           }
         }
         
         // If it's a base58 string (like from Phantom), try to decode it
         if (privateKey.length >= 80 && privateKey.length <= 90) {
-          console.log('🔍 Attempting base58 decode for string length:', privateKey.length);
+          debugLog('🔍 Attempting base58 decode for string length:', privateKey.length);
           try {
             const decoded = bs58.decode(privateKey);
             if (decoded.length === 64) {
-              console.log('✅ Base58 decode successful, length:', decoded.length);
+              debugLog('✅ Base58 decode successful, length:', decoded.length);
               return new Uint8Array(decoded);
             } else {
               throw new Error(`Invalid base58 private key length: ${decoded.length}, expected 64`);
             }
           } catch (bs58Error) {
-            console.log('⚠️ Base58 decoding failed:', bs58Error);
+            debugLog('⚠️ Base58 decoding failed:', bs58Error);
             throw new Error(`Base58 decoding failed: ${bs58Error instanceof Error ? bs58Error.message : 'Unknown error'}`);
           }
         }
         
         // Additional check: if the string looks like it might be a raw private key
         if (privateKey.length === 128) {
-          console.log('🔍 Attempting hex decode for string length:', privateKey.length);
+          debugLog('🔍 Attempting hex decode for string length:', privateKey.length);
           // Might be a hex string, try to convert
           try {
             const hexBytes = privateKey.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16));
             if (hexBytes && hexBytes.length === 64) {
-              console.log('✅ Hex decode successful, length:', hexBytes.length);
+              debugLog('✅ Hex decode successful, length:', hexBytes.length);
               return new Uint8Array(hexBytes);
             }
           } catch (hexError) {
-            console.log('⚠️ Hex decode failed:', hexError);
+            debugLog('⚠️ Hex decode failed:', hexError);
             // Not a valid hex string, continue to error
           }
         }
         
-        console.log('❌ Unsupported private key format:', {
+        debugLog('❌ Unsupported private key format:', {
           length: privateKey.length,
           preview: typeof privateKey === 'string' ? privateKey.substring(0, 50) + '...' : 'Array',
           startsWithBracket: typeof privateKey === 'string' ? privateKey.startsWith('[') : false,
@@ -154,9 +163,9 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
         confirmTransactionInitialTimeout: 60000
       });
       
-      console.log('🔗 Blockchain Service initialized');
-      console.log(`🌐 Network: ${this.networkConfig.network}`);
-      console.log(`🔗 RPC: ${this.networkConfig.rpcUrl}`);
+      debugLog('🔗 Blockchain Service initialized');
+      debugLog(`🌐 Network: ${this.networkConfig.network}`);
+      debugLog(`🔗 RPC: ${this.networkConfig.rpcUrl}`);
     }
 
     // Method to ensure house wallet is loaded
@@ -172,7 +181,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
       const walletKeys = await getActiveWalletKeys();
       const privateKeyArray = convertPrivateKeyToUint8Array(walletKeys.privateKey);
       this.houseWallet = Keypair.fromSecretKey(privateKeyArray);
-      console.log('🔄 House wallet refreshed:', this.houseWallet.publicKey.toString());
+      debugLog('🔄 House wallet refreshed:', this.houseWallet.publicKey.toString());
     }
 
     // Method to get current house wallet (for external access)
@@ -187,7 +196,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
       token: string
     ): Promise<TransferResult> {
       try {
-        console.log(`💸 Transferring ${amount} ${token} from ${userWalletAddress} to house`);
+        debugLog(`💸 Transferring ${amount} ${token} from ${userWalletAddress} to house`);
         
         if (token === 'SOL') {
           return await this.transferSOLToHouse(userWalletAddress, amount);
@@ -210,7 +219,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
       token: string
     ): Promise<TransferResult> {
       try {
-        console.log(`💰 Transferring ${amount} ${token} from house to ${userWalletAddress}`);
+        debugLog(`💰 Transferring ${amount} ${token} from house to ${userWalletAddress}`);
         
         if (token === 'SOL') {
           return await this.transferSOLFromHouse(userWalletAddress, amount);
@@ -238,7 +247,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
       const userPublicKey = new PublicKey(userWalletAddress);
       // IMPORTANT: Use proper conversion for testnet/devnet
       const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
-      console.log(`💸 Converting ${amount} SOL to ${lamports} lamports`);
+      debugLog(`💸 Converting ${amount} SOL to ${lamports} lamports`);
 
       const transaction = new Transaction().add(
         SystemProgram.transfer({
@@ -289,7 +298,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
           { commitment: 'confirmed' }
         );
         
-        console.log(`✅ SOL transfer completed: ${signature}`);
+        debugLog(`✅ SOL transfer completed: ${signature}`);
         
         // Get new balance
         const newBalance = await this.connection.getBalance(userPublicKey);
@@ -337,7 +346,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
       try {
         await getAccount(this.connection, houseTokenAccount);
       } catch (error) {
-        console.log('Creating house token account...');
+        debugLog('Creating house token account...');
         transaction.add(
           createAssociatedTokenAccountInstruction(
             houseWallet.publicKey, // payer
@@ -406,7 +415,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
       try {
         await getAccount(this.connection, userTokenAccount);
       } catch (error) {
-        console.log('Creating user token account...');
+        debugLog('Creating user token account...');
         transaction.add(
           createAssociatedTokenAccountInstruction(
             houseWallet.publicKey, // payer (house pays for account creation)
@@ -435,7 +444,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
           { commitment: 'confirmed' }
         );
         
-        console.log(`✅ ${token} transfer completed: ${signature}`);
+        debugLog(`✅ ${token} transfer completed: ${signature}`);
         
         // Get new balance
         const userTokenAccountInfo = await getAccount(this.connection, userTokenAccount);
@@ -483,8 +492,8 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
     // Create Keypair from wallet data (for wallet rotation)
     createKeypairFromWallet(walletData: { publicKey: string; privateKey: string | number[] }): Keypair {
       try {
-        console.log('🔑 Creating Keypair from wallet data...');
-        console.log('📊 Wallet data:', {
+        debugLog('🔑 Creating Keypair from wallet data...');
+        debugLog('📊 Wallet data:', {
           publicKey: walletData.publicKey?.substring(0, 20) + '...',
           privateKeyLength: walletData.privateKey,
           privateKeyType: typeof walletData.privateKey,
@@ -497,7 +506,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
         if (typeof walletData.privateKey === 'string') {
           // Check if it's encrypted (starts with U2FsdGVkX1)
           if (walletData.privateKey.startsWith('U2FsdGVkX1')) {
-            console.log('🔓 Decrypting private key...');
+            debugLog('🔓 Decrypting private key...');
             // It's encrypted, decrypt it
             const SERVER_SHARED_SECRET = process.env.SHARED_SECRET_For_PRIVATE_KEY;
             if (!SERVER_SHARED_SECRET) {
@@ -518,13 +527,13 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
               try {
                 // Try UTF-8 first
                 decryptedString = bytes.toString(CryptoJS.enc.Utf8);
-                console.log('✅ Private key decrypted with UTF-8, length:', decryptedString.length);
+                debugLog('✅ Private key decrypted with UTF-8, length:', decryptedString.length);
               } catch (utf8Error) {
-                console.log('⚠️ UTF-8 conversion failed, trying hex encoding...');
+                debugLog('⚠️ UTF-8 conversion failed, trying hex encoding...');
                 try {
                   // Try hex encoding as fallback
                   decryptedString = bytes.toString(CryptoJS.enc.Hex);
-                  console.log('✅ Private key decrypted with hex encoding, length:', decryptedString.length);
+                  debugLog('✅ Private key decrypted with hex encoding, length:', decryptedString.length);
                   
                   // Convert hex to readable format if possible
                   if (decryptedString.length === 128) {
@@ -532,16 +541,16 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
                     const hexBytes = decryptedString.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16));
                     if (hexBytes && hexBytes.length === 64) {
                       privateKey = hexBytes;
-                      console.log('✅ Converted hex to byte array');
+                      debugLog('✅ Converted hex to byte array');
                       return Keypair.fromSecretKey(new Uint8Array(hexBytes));
                     }
                   }
                 } catch (hexError) {
-                  console.log('⚠️ Hex encoding also failed, trying base64...');
+                  debugLog('⚠️ Hex encoding also failed, trying base64...');
                   try {
                     // Try base64 as last resort
                     decryptedString = bytes.toString(CryptoJS.enc.Base64);
-                    console.log('✅ Private key decrypted with base64 encoding, length:', decryptedString.length);
+                    debugLog('✅ Private key decrypted with base64 encoding, length:', decryptedString.length);
                   } catch (base64Error) {
                     throw new Error('All encoding methods failed');
                   }
@@ -553,19 +562,19 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
               }
               
               privateKey = decryptedString;
-              console.log('✅ Private key decrypted successfully, length:', privateKey.length);
-              console.log('🔍 Decrypted private key preview:', typeof privateKey === 'string' ? privateKey.substring(0, 50) + '...' : 'Array');
+              debugLog('✅ Private key decrypted successfully, length:', privateKey.length);
+              debugLog('🔍 Decrypted private key preview:', typeof privateKey === 'string' ? privateKey.substring(0, 50) + '...' : 'Array');
               
               // Check if the decrypted data is already in the right format
               if (typeof privateKey === 'string' && privateKey.startsWith('[') && privateKey.endsWith(']')) {
                 try {
                   const parsed = JSON.parse(privateKey);
                   if (Array.isArray(parsed) && parsed.length === 64) {
-                    console.log('✅ Decrypted data is already a valid array, creating Keypair directly');
+                    debugLog('✅ Decrypted data is already a valid array, creating Keypair directly');
                     return Keypair.fromSecretKey(new Uint8Array(parsed));
                   }
                 } catch (parseError) {
-                  console.log('⚠️ Failed to parse decrypted array, continuing with conversion...');
+                  debugLog('⚠️ Failed to parse decrypted array, continuing with conversion...');
                 }
               }
             } catch (decryptError) {
@@ -573,26 +582,26 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
               throw new Error(`Decryption failed: ${decryptError instanceof Error ? decryptError.message : 'Unknown error'}`);
             }
           } else {
-            console.log('✅ Private key is not encrypted, using as-is');
+            debugLog('✅ Private key is not encrypted, using as-is');
             // It's not encrypted, use as-is
             privateKey = walletData.privateKey;
           }
         } else {
-          console.log('✅ Private key is already an array');
+          debugLog('✅ Private key is already an array');
           privateKey = walletData.privateKey;
         }
         
-        console.log('🔄 Converting private key to Uint8Array...');
-        console.log('🔍 Private key type:', typeof privateKey);
-        console.log('🔍 Private key preview:', typeof privateKey === 'string' ? privateKey.substring(0, 50) + '...' : 'Array');
+        debugLog('🔄 Converting private key to Uint8Array...');
+        debugLog('🔍 Private key type:', typeof privateKey);
+        debugLog('🔍 Private key preview:', typeof privateKey === 'string' ? privateKey.substring(0, 50) + '...' : 'Array');
         
         // Convert to Uint8Array using our helper function
         const privateKeyArray = convertPrivateKeyToUint8Array(privateKey);
-        console.log('✅ Private key converted to Uint8Array, length:', privateKeyArray.length);
+        debugLog('✅ Private key converted to Uint8Array, length:', privateKeyArray.length);
         
         // Create and return the Keypair
         const keypair = Keypair.fromSecretKey(privateKeyArray);
-        console.log('✅ Keypair created successfully');
+        debugLog('✅ Keypair created successfully');
         return keypair;
       } catch (error) {
         console.error('❌ Failed to create Keypair:', error);
@@ -608,7 +617,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
       expectedToken: string
     ): Promise<{ valid: boolean; error?: string }> {
       try {
-        console.log(`🔍 Verifying transaction with strict checks:`, {
+        debugLog(`🔍 Verifying transaction with strict checks:`, {
           signature,
           expectedSender,
           expectedAmount,
@@ -619,7 +628,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
         const Transaction = (await import('../models/transaction.model')).default;
         const existingTx = await Transaction.findOne({ signature });
         if (existingTx) {
-          console.log('❌ Transaction signature already used');
+          debugLog('❌ Transaction signature already used');
           return { valid: false, error: 'Transaction signature has already been used' };
         }
         
@@ -632,25 +641,25 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
         
         // If not finalized yet, try confirmed (still secure)
         if (!transaction) {
-          console.log('⏳ Transaction not finalized yet, checking confirmed status...');
+          debugLog('⏳ Transaction not finalized yet, checking confirmed status...');
           transaction = await this.connection.getTransaction(signature, {
             commitment: 'confirmed',
             maxSupportedTransactionVersion: 0
           });
           
           if (!transaction) {
-            console.log('❌ Transaction not found on blockchain');
+            debugLog('❌ Transaction not found on blockchain');
             return { valid: false, error: 'Transaction not found. Please wait a few seconds and try again.' };
           }
           
-          console.log('✅ Transaction confirmed (not yet finalized)');
+          debugLog('✅ Transaction confirmed (not yet finalized)');
         } else {
-          console.log('✅ Transaction finalized');
+          debugLog('✅ Transaction finalized');
         }
         
         // 3. Check if transaction was successful
         if (transaction.meta?.err) {
-          console.log('❌ Transaction failed:', transaction.meta.err);
+          debugLog('❌ Transaction failed:', transaction.meta.err);
           return { valid: false, error: 'Transaction failed on blockchain' };
         }
         
@@ -681,7 +690,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
         }
         
         if (!verified) {
-          console.log('❌ Transaction verification failed');
+          debugLog('❌ Transaction verification failed');
           return { valid: false, error: 'Transaction details do not match expected values' };
         }
         
@@ -695,9 +704,9 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
           usedAt: new Date()
         });
         
-        console.log(`📝 Transaction signature recorded in database: ${signature}`);
+        debugLog(`📝 Transaction signature recorded in database: ${signature}`);
         
-        console.log('✅ Transaction verified successfully with all security checks');
+        debugLog('✅ Transaction verified successfully with all security checks');
         return { valid: true };
         
       } catch (error) {
@@ -738,12 +747,12 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
         }
         
         if (senderIndex === -1) {
-          console.log('❌ Sender not found in transaction');
+          debugLog('❌ Sender not found in transaction');
           return false;
         }
         
         if (recipientIndex === -1) {
-          console.log('❌ Recipient (house wallet) not found in transaction');
+          debugLog('❌ Recipient (house wallet) not found in transaction');
           return false;
         }
         
@@ -752,7 +761,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
         const recipientBalanceChange = postBalances[recipientIndex] - preBalances[recipientIndex];
         const expectedLamports = Math.floor(expectedAmount * LAMPORTS_PER_SOL);
         
-        console.log('💰 Balance changes:', {
+        debugLog('💰 Balance changes:', {
           senderDecrease: senderBalanceChange,
           recipientIncrease: recipientBalanceChange,
           expectedLamports
@@ -761,11 +770,11 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
         // Verify recipient received at least the expected amount (may be slightly less due to fees)
         const tolerance = 5000; // 0.000005 SOL tolerance for fee variance
         if (recipientBalanceChange < (expectedLamports - tolerance)) {
-          console.log('❌ Amount mismatch');
+          debugLog('❌ Amount mismatch');
           return false;
         }
         
-        console.log('✅ SOL transfer verified');
+        debugLog('✅ SOL transfer verified');
         return true;
         
       } catch (error) {
@@ -786,7 +795,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
         // Get token mint address from network configuration
         const tokenMint = TOKEN_MINTS[tokenSymbol as keyof typeof TOKEN_MINTS];
         if (!tokenMint) {
-          console.log('❌ Token mint not found for', tokenSymbol);
+          debugLog('❌ Token mint not found for', tokenSymbol);
           return false;
         }
         
@@ -817,7 +826,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
           }
         }
         
-        console.log('💰 Token balance changes:', {
+        debugLog('💰 Token balance changes:', {
           recipientIncrease: recipientChange,
           senderDecrease: senderChange,
           expectedAmount
@@ -826,11 +835,11 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
         // Verify amounts match (with small tolerance for rounding)
         const tolerance = 0.0001;
         if (Math.abs(recipientChange - expectedAmount) > tolerance) {
-          console.log('❌ Token amount mismatch');
+          debugLog('❌ Token amount mismatch');
           return false;
         }
         
-        console.log('✅ SPL token transfer verified');
+        debugLog('✅ SPL token transfer verified');
     return true;
     
   } catch (error) {
@@ -844,7 +853,7 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
       try {
         const Transaction = (await import('../models/transaction.model')).default;
         await Transaction.updateOne({ signature }, { betId });
-        console.log(`📝 Updated transaction ${signature} with betId: ${betId}`);
+        debugLog(`📝 Updated transaction ${signature} with betId: ${betId}`);
       } catch (error) {
         console.error('❌ Error updating transaction betId:', error);
       }

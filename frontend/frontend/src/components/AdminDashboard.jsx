@@ -193,11 +193,9 @@ const AdminDashboard = () => {
 
   // Login handler
   const handleLogin = async (e) => {
-    console.log( `login called:${JSON.stringify(loginForm)}`)
     e.preventDefault();
     setError('');
     try {
-      console.log(`${API_URL}api/admin/login`)
       const response = await axios.post(`${API_URL}api/admin/login`, loginForm);
       if (response.data.success) {
         const adminToken = response.data.data.token;
@@ -4957,7 +4955,7 @@ const AdminDashboard = () => {
                   </div>
 
                   {/* Password */}
-                  <div>
+                  {/* <div>
                     <label style={{
                       display: 'block',
                       marginBottom: '0.5rem',
@@ -4996,7 +4994,7 @@ const AdminDashboard = () => {
                         <Edit3 size={16} />
                       </button>
                     </div>
-                  </div>
+                  </div> */}
 
                   {/* Ambassador Code */}
                   <div>

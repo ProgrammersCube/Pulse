@@ -1413,9 +1413,7 @@ referredPlayersStats()
     e.preventDefault();
     setError('');
     try {
-      console.log(loginForm)
       const login = await adminApi.post("/ambassadar-login", {username: loginForm?.username,password:loginForm?.password})
-      console.log(login?.data?.data?.token)
       setAmbassadarId(login?.data?.data?.ambassadar?.id)
        localStorage.setItem('ambassadorToken', login?.data?.data?.token);
        setToken(login?.data?.data?.token)
