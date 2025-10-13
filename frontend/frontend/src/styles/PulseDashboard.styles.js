@@ -342,10 +342,15 @@ export const styles = {
   tabHeader: {
     display: 'flex',
     background: 'rgba(255, 255, 255, 0.03)',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+    overflowX: 'auto',
+    paddingBottom: '0.5rem',
+    scrollbarWidth: 'thin',
+    scrollbarColor: 'rgba(168, 85, 247, 0.3) transparent',
+    WebkitOverflowScrolling: 'touch'
   },
   tabButton: {
-    flex: 1,
+    flex: '0 0 auto',
     padding: '1.5rem 2rem',
     background: 'transparent',
     border: 'none',
@@ -358,7 +363,9 @@ export const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     gap: '0.5rem',
-    position: 'relative'
+    position: 'relative',
+    whiteSpace: 'nowrap',
+    minWidth: 'fit-content'
   },
   tabButtonActive: {
     color: 'white',

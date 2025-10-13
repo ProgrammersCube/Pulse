@@ -130,7 +130,7 @@ export const styles={
     border: '1px solid rgba(255, 255, 255, 0.1)',
     boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
     position: 'relative',
-    overflow: 'hidden',
+    overflow: 'visible',
     zIndex: 15
   },
   cardGlow: {
@@ -182,7 +182,9 @@ export const styles={
     color: 'white',
     fontSize: '0.95rem',
     transition: 'all 0.3s ease',
-    outline: 'none'
+    outline: 'none',
+    boxSizing: 'border-box',
+    minWidth: '0'
   },
   inputFocus: {
     borderColor: '#a855f7',

@@ -304,6 +304,25 @@ const PulseDashboard = () => {
       .referral-scrollbar::-webkit-scrollbar-thumb:hover {
         background: rgba(168, 85, 247, 0.5);
       }
+      
+      .pulse-tab-scrollbar::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      
+      .pulse-tab-scrollbar::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.1);
+        border-radius: 4px;
+      }
+      
+      .pulse-tab-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(168, 85, 247, 0.3);
+        border-radius: 4px;
+      }
+      
+      .pulse-tab-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(168, 85, 247, 0.5);
+      }
     `;
     document.head.appendChild(style);
     
@@ -892,7 +911,7 @@ const PulseDashboard = () => {
           style={styles.tabContainer}
         >
           {/* Tab Headers */}
-          <div style={styles.tabHeader}>
+          <div style={styles.tabHeader} className="pulse-tab-scrollbar">
             <motion.button
               onClick={() => setActiveTab('stats')}
               style={{

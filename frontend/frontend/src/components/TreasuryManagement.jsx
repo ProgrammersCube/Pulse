@@ -845,7 +845,7 @@ const TreasuryManagement = () => {
           ...styles.card, 
           position: 'relative', 
           zIndex: 16,
-          overflow: 'hidden',
+          overflow: 'visible',
           minWidth: '0'
         }}
         initial={{ opacity: 0, y: 20 }}
@@ -878,12 +878,16 @@ const TreasuryManagement = () => {
         
         <div style={{ 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
           gap: '1.5rem',
           padding: '0.5rem',
-          overflow: 'hidden'
+          overflow: 'visible',
+          '@media (max-width: 768px)': {
+            gridTemplateColumns: '1fr',
+            gap: '1rem'
+          }
         }}>
-          <div style={{ minWidth: '0', overflow: 'hidden' }}>
+          <div style={{ minWidth: '0', overflow: 'visible' }}>
             <label style={{
               display: 'block',
               fontSize: '0.875rem',
@@ -931,7 +935,7 @@ const TreasuryManagement = () => {
             )}
           </div>
           
-          <div style={{ minWidth: '0', overflow: 'hidden' }}>
+          <div style={{ minWidth: '0', overflow: 'visible' }}>
             <label style={{
               display: 'block',
               fontSize: '0.875rem',
@@ -1018,7 +1022,7 @@ const TreasuryManagement = () => {
             </p>
           </div>
           
-          <div style={{ minWidth: '0', overflow: 'hidden' }}>
+          <div style={{ minWidth: '0', overflow: 'visible' }}>
             <label style={{
               display: 'block',
               fontSize: '0.875rem',
@@ -1048,7 +1052,7 @@ const TreasuryManagement = () => {
             </select>
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'flex-end', minWidth: '0', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', minWidth: '0', overflow: 'visible' }}>
             <motion.button
               onClick={addNewWallet}
               disabled={!newWallet.publicKey || !newWallet.privateKey || !publicKeyValidation.valid || !privateKeyValidation.valid}

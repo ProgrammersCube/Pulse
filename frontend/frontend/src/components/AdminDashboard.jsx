@@ -3613,7 +3613,7 @@ const AdminDashboard = () => {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '2rem', overflow: 'visible' }}
             >
 
 {/* Create Ambassador */}
@@ -3662,9 +3662,14 @@ const AdminDashboard = () => {
     }} 
     style={{ 
       display: 'grid', 
-      gridTemplateColumns: '1fr 1fr', 
-      gap: '1.5rem',
-      alignItems: 'end'
+      gridTemplateColumns: '1.2fr 0.8fr', 
+      gap: '2rem',
+      alignItems: 'end',
+      padding: '0.5rem',
+      '@media (max-width: 768px)': {
+        gridTemplateColumns: '1fr',
+        gap: '1.5rem'
+      }
     }}
   >
     {/* Wallet Address - Full Width */}
@@ -3686,7 +3691,7 @@ const AdminDashboard = () => {
     </div>
     
     {/* Username - Left Column */}
-    <div>
+    <div style={{ minWidth: '0', overflow: 'visible' }}>
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -3711,12 +3716,14 @@ const AdminDashboard = () => {
           }}
           style={{
             ...styles.neonButton,
-            padding: '0.5rem 0.75rem',
-            fontSize: '0.75rem',
+            padding: '0.4rem 0.6rem',
+            fontSize: '0.7rem',
             background: 'rgba(59, 130, 246, 0.1)',
             borderColor: 'rgba(59, 130, 246, 0.3)',
             color: '#3b82f6',
-            whiteSpace: 'nowrap'
+            whiteSpace: 'nowrap',
+            minWidth: 'auto',
+            flexShrink: 0
           }}
           whileHover={{ 
             scale: 1.05,
@@ -3740,7 +3747,7 @@ const AdminDashboard = () => {
     </div>
     
     {/* Password - Right Column */}
-    <div>
+    <div style={{ minWidth: '0', overflow: 'visible' }}>
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -3769,12 +3776,14 @@ const AdminDashboard = () => {
           }}
           style={{
             ...styles.neonButton,
-            padding: '0.5rem 0.75rem',
-            fontSize: '0.75rem',
+            padding: '0.4rem 0.6rem',
+            fontSize: '0.7rem',
             background: 'rgba(236, 72, 153, 0.1)',
             borderColor: 'rgba(236, 72, 153, 0.3)',
             color: '#ec4899',
-            whiteSpace: 'nowrap'
+            whiteSpace: 'nowrap',
+            minWidth: 'auto',
+            flexShrink: 0
           }}
           whileHover={{ 
             scale: 1.05,
@@ -3827,7 +3836,7 @@ const AdminDashboard = () => {
     </div>
     
     {/* Ambassador Code - Left Column */}
-    <div>
+    <div style={{ minWidth: '0', overflow: 'visible' }}>
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -3847,12 +3856,14 @@ const AdminDashboard = () => {
           onClick={generateUniqueCode}
           style={{
             ...styles.neonButton,
-            padding: '0.5rem 0.75rem',
-            fontSize: '0.75rem',
+            padding: '0.4rem 0.6rem',
+            fontSize: '0.7rem',
             background: 'rgba(168, 85, 247, 0.1)',
             borderColor: 'rgba(168, 85, 247, 0.3)',
             color: '#a855f7',
-            whiteSpace: 'nowrap'
+            whiteSpace: 'nowrap',
+            minWidth: 'auto',
+            flexShrink: 0
           }}
           whileHover={{ 
             scale: 1.05,
@@ -3876,7 +3887,7 @@ const AdminDashboard = () => {
     </div>
     
     {/* Commission Percentage - Right Column */}
-    <div>
+    <div style={{ minWidth: '0', overflow: 'visible' }}>
       <label style={{
         display: 'block',
         fontSize: '0.875rem',
