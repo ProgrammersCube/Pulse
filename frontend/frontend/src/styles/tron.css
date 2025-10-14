@@ -143,6 +143,9 @@ code {
 
 /* ================= HEADER ================= */
 .header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   padding: 15px 20px;
   max-width: 1200px;
   margin: 0 auto;
@@ -150,45 +153,6 @@ code {
   box-sizing: border-box;
   position: relative;
   z-index: 5;
-}
-
-/* Mobile Layout - Hidden on Desktop */
-.header-mobile {
-  display: none;
-}
-
-/* Desktop Layout - Visible on Desktop */
-.header-desktop {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-/* Header right side - contains navigation and wallet */
-.header-right-side {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-/* Desktop Navigation */
-.desktop-navigation {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-/* Desktop Wallet Container */
-.desktop-wallet-container {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-/* Mobile Wallet Container - Hidden on desktop */
-.mobile-wallet-container {
-  display: none;
 }
 
 .header::after {
@@ -823,72 +787,11 @@ code {
     padding: 0 20px !important;
   }
 
-  /* Mobile Header Layout */
+  /* Fix header on mobile */
   .header {
+    flex-wrap: nowrap;
     padding: 10px 15px;
-  }
-  
-  /* Show mobile layout, hide desktop */
-  .header-mobile {
-    display: block;
-  }
-  
-  .header-desktop {
-    display: none;
-  }
-  
-  .desktop-navigation {
-    display: none;
-  }
-  
-  .desktop-wallet-container {
-    display: none;
-  }
-  
-  /* Mobile header top row */
-  .header-mobile-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-  }
-  
-  .header-mobile-right {
-    display: flex;
-    align-items: center;
     gap: 10px;
-  }
-  
-  /* Mobile wallet container adjustments */
-  .mobile-wallet-container {
-    display: flex !important;
-    flex-direction: column;
-    gap: 10px;
-    padding: 15px;
-    margin-top: 10px;
-  }
-  
-  .mobile-wallet-container .connected-wallet {
-    width: 100%;
-  }
-  
-  .mobile-wallet-container .connected-wallet > div {
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-  
-  .mobile-wallet-container .connect-wallet-section {
-    display: flex;
-    justify-content: center;
-    width: 100%;
-  }
-  
-  /* Mobile token dropdown positioning */
-  .token-dropdown {
-    right: auto !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: 180px !important;
   }
   
   .logo-container h1 {
@@ -921,37 +824,6 @@ code {
   
   .wallet-address {
     font-size: 0.8rem !important;
-  }
-  
-  /* Fix wallet button cutoff on mobile */
-  .wallet-container {
-    min-width: 0 !important;
-    flex-shrink: 1 !important;
-  }
-  
-  .wallet-container .neon-button {
-    font-size: 0.8rem !important;
-    padding: 8px 12px !important;
-    max-width: 120px !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-  }
-  
-  /* Fix Solana wallet button specific styles */
-  .wallet-adapter-button {
-    font-size: 0.8rem !important;
-    padding: 8px 12px !important;
-    max-width: 120px !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-  }
-  
-  /* Ensure wallet button doesn't overflow header */
-  .header .wallet-container {
-    max-width: 120px !important;
-    overflow: hidden !important;
   }
   
   /* Fix main container padding */
@@ -1219,26 +1091,6 @@ code {
     font-size: 1.2rem !important;
   }
   
-  /* Extra small mobile header adjustments */
-  .header {
-    padding: 8px 10px;
-  }
-  
-  .header-mobile-right {
-    gap: 8px;
-  }
-  
-  /* Mobile navigation menu on smaller screens */
-  .mobile-navigation {
-    padding: 10px !important;
-  }
-  
-  /* Adjust wallet button for very small screens */
-  .connect-wallet-button {
-    padding: 10px 20px !important;
-    font-size: 12px !important;
-  }
-  
   .direction-button {
     width: 100px !important;
     height: 70px !important;
@@ -1253,23 +1105,6 @@ code {
   .hero-section .neon-button {
     width: 100% !important;
     max-width: none !important;
-  }
-  
-  /* Fix wallet button on extra small screens */
-  .wallet-container .neon-button {
-    font-size: 0.7rem !important;
-    padding: 6px 10px !important;
-    max-width: 100px !important;
-  }
-  
-  .wallet-adapter-button {
-    font-size: 0.7rem !important;
-    padding: 6px 10px !important;
-    max-width: 100px !important;
-  }
-  
-  .header .wallet-container {
-    max-width: 100px !important;
   }
   
   .game-play-screen {

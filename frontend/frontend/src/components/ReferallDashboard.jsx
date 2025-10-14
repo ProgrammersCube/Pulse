@@ -23,32 +23,28 @@ const ReferralDashboard = () => {
     if(!isConnected && !address) return;
     console.log(isConnected)
     console.log(address)
-    
-    // Fetch referral data when address is available
-    if (address) {
-      fetchReferralData();
-    }
-  },[address, isConnected])
+  },[])
   // Mock data - replace with actual API calls
   const [referralData, setReferralData] = useState({
     totalReferrals: 24,
     totalBonusEarned: 156.75,
-    bonusTokens: {
-      BeTyche: 100.50,
-      SOL: 2.25,
-      ETH: 0.15,
-      RADBRO: 54.00
-    },
+    bonusToken: 'BeTyche',
     referralCode: 'PULSE2025',
     referralHistory: [
-      { id: 1, wallet: '0x742d35Cc6635C0532925a3b8D4c3D3e8f7c1234A', date: '2025-01-15', bonusEarned: 10.50 },
-      { id: 2, wallet: '0x8b5cf6A9d3E2B7C4F1A8D3E2B7C4F1A8D3E2B7C5', date: '2025-01-14', bonusEarned: 15.25 },
-      { id: 3, wallet: '0x1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t', date: '2025-01-13', bonusEarned: 8.75 },
-      { id: 4, wallet: '0x9f8e7d6c5b4a39281736455463728190abcdef12', date: '2025-01-12', bonusEarned: 12.00 },
-      { id: 5, wallet: '0x5a4b3c2d1e0f9g8h7i6j5k4l3m2n1o0p9q8r7s6t', date: '2025-01-11', bonusEarned: 20.25 }
+      { id: 1, wallet: '0x742d35Cc6635C0532925a3b8D4c3D3e8f7c1234A', date: '2024-01-15', bonusEarned: 10.50 },
+      { id: 2, wallet: '0x8b5cf6A9d3E2B7C4F1A8D3E2B7C4F1A8D3E2B7C5', date: '2024-01-14', bonusEarned: 15.25 },
+      { id: 3, wallet: '0x1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t', date: '2024-01-13', bonusEarned: 8.75 },
+      { id: 4, wallet: '0x9f8e7d6c5b4a39281736455463728190abcdef12', date: '2024-01-12', bonusEarned: 12.00 },
+      { id: 5, wallet: '0x5a4b3c2d1e0f9g8h7i6j5k4l3m2n1o0p9q8r7s6t', date: '2024-01-11', bonusEarned: 20.25 }
     ]
   });
 
+  // Login form for registered users
+  const [loginForm, setLoginForm] = useState({ 
+    walletAddress: '', 
+    signature: '' 
+  });
+  const [showSignature, setShowSignature] = useState(false);
 
   // Add animations
   useEffect(() => {
@@ -105,43 +101,26 @@ const ReferralDashboard = () => {
     };
   }, []);
 
-  // Fetch referral data from API
+  // Mock API calls
   const fetchReferralData = async (showRefresh = false) => {
-    if (!address) {
-      setError('Wallet address not found');
-      return;
-    }
-
     if (showRefresh) setRefreshing(true);
     else setLoading(true);
     
     setError('');
     
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/'}api/wallet/Detailed-Referall-Dashboard/${address}`);
-      const result = await response.json();
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      if (result.success) {
-        const data = result.data;
-        
-        // Calculate total bonus earned from bonusTokens object
-        const totalBonusEarned = Object.values(data.bonusTokens).reduce((sum, amount) => sum + (amount || 0), 0);
-        
-        setReferralData({
-          totalReferrals: data.totalReferrals,
-          totalBonusEarned: totalBonusEarned,
-          bonusTokens: data.bonusTokens, // Store the full bonusTokens object
-          referralCode: data.referralCode,
-          referralHistory: data.referralHistory || []
-        });
-        
-        // Update user type based on loginType from API
-        setUserType(data.loginType);
-      } else {
-        setError(result.message || 'Failed to fetch referral data');
+      // Mock different data based on user type
+      if (userType === 'registered') {
+        setReferralData(prev => ({
+          ...prev,
+          totalReferrals: 34,
+          totalBonusEarned: 245.50
+        }));
       }
     } catch (error) {
-      console.error('Error fetching referral data:', error);
       setError('Failed to fetch referral data');
     } finally {
       setLoading(false);
@@ -149,6 +128,23 @@ const ReferralDashboard = () => {
     }
   };
 
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    
+    try {
+      // Simulate login
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setUserType('registered');
+      setSuccess('Successfully logged in!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError('Login failed. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const copyToClipboard = (text, type) => {
     navigator.clipboard.writeText(text);
@@ -164,103 +160,9 @@ const ReferralDashboard = () => {
     return amount.toFixed(2);
   };
 
-  const formatBonusTokens = (bonusTokens) => {
-    const tokens = [];
-    if (bonusTokens.BeTyche > 0) tokens.push(`${formatCurrency(bonusTokens.BeTyche)} BeTyche`);
-    if (bonusTokens.SOL > 0) tokens.push(`${formatCurrency(bonusTokens.SOL)} SOL`);
-    if (bonusTokens.ETH > 0) tokens.push(`${formatCurrency(bonusTokens.ETH)} ETH`);
-    if (bonusTokens.RADBRO > 0) tokens.push(`${formatCurrency(bonusTokens.RADBRO)} RADBRO`);
-    
-    return tokens.length > 0 ? tokens.join(', ') : '0.00';
-  };
-
-  // Show wallet connection prompt if no wallet is connected
-  if (!isConnected || !address) {
-    return (
-      <div style={{...styles.container, position: 'relative', zIndex: 10}}>
-        {/* Background effects */}
-        <div style={styles.backgroundEffects}>
-          <div style={{
-            ...styles.glowOrb,
-            width: '500px',
-            height: '500px',
-            background: 'radial-gradient(circle, rgba(168, 85, 247, 0.2) 0%, transparent 70%)',
-            top: '10%',
-            left: '5%',
-            animation: 'float 25s infinite ease-in-out'
-          }} />
-          <div style={{
-            ...styles.glowOrb,
-            width: '600px',
-            height: '600px',
-            background: 'radial-gradient(circle, rgba(236, 72, 153, 0.2) 0%, transparent 70%)',
-            bottom: '20%',
-            right: '10%',
-            animation: 'float 30s infinite ease-in-out reverse'
-          }} />
-        </div>
-
-        <div style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexDirection: 'column',
-          gap: '2rem',
-          padding: '2rem'
-        }}>
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: 'spring' }}
-            style={{
-              width: '120px',
-              height: '120px',
-              background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
-              borderRadius: '30px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 0 60px rgba(168, 85, 247, 0.5)',
-              marginBottom: '1rem'
-            }}
-          >
-            <Wallet size={60} color="white" />
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            style={{ textAlign: 'center' }}
-          >
-            <h1 style={{
-              fontSize: '2.5rem',
-              fontWeight: 'bold',
-              marginBottom: '1rem',
-              background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent'
-            }}>
-              Please Connect Your Wallet
-            </h1>
-            <p style={{
-              fontSize: '1.25rem',
-              color: 'rgba(255, 255, 255, 0.7)',
-              marginBottom: '2rem',
-              maxWidth: '500px'
-            }}>
-              To See This Dashboard
-            </p>
-          </motion.div>
-        </div>
-      </div>
-    );
-  }
-
   if (loading && userType === 'guest') {
     return (
-      <div style={{...styles.container, position: 'relative', zIndex: 10}}>
+      <div style={styles.container}>
         <div style={{
           minHeight: '100vh',
           display: 'flex',
@@ -287,7 +189,7 @@ const ReferralDashboard = () => {
   }
 
   return (
-    <div style={{...styles.container, position: 'relative', zIndex: 10}}>
+    <div style={styles.container}>
       {/* Background effects */}
       <div style={styles.backgroundEffects}>
         <div style={{
@@ -416,6 +318,201 @@ const ReferralDashboard = () => {
         zIndex: 1
       }}>
         <AnimatePresence mode="wait">
+          {userType === 'login' && (
+            <motion.div
+              key="login"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                minHeight: '60vh'
+              }}
+            >
+              <motion.div 
+                style={{
+                  ...styles.card,
+                  maxWidth: '500px',
+                  width: '100%'
+                }}
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+                className="hover-lift"
+              >
+                <div style={styles.cardGlow} />
+                
+                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.2, type: 'spring' }}
+                    style={{
+                      width: '80px',
+                      height: '80px',
+                      margin: '0 auto 1.5rem',
+                      background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                      borderRadius: '24px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 0 40px rgba(168, 85, 247, 0.5)'
+                    }}
+                  >
+                    <User size={40} color="white" />
+                  </motion.div>
+                  
+                  <h2 style={{
+                    fontSize: '1.75rem',
+                    fontWeight: 'bold',
+                    marginBottom: '0.5rem',
+                    background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent'
+                  }}>
+                    LOGIN TO ACCESS
+                  </h2>
+                  <p style={{ color: 'rgba(255, 255, 255, 0.6)' }}>
+                    View your complete referral history
+                  </p>
+                </div>
+                
+                <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                      marginBottom: '0.5rem',
+                      color: 'rgba(255, 255, 255, 0.8)'
+                    }}>
+                      Wallet Address
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="0x..."
+                      style={{
+                        ...styles.input,
+                        fontFamily: 'monospace',
+                        ...(focusedInput === 'wallet' ? styles.inputFocus : {})
+                      }}
+                      value={loginForm.walletAddress}
+                      onChange={(e) => setLoginForm({...loginForm, walletAddress: e.target.value})}
+                      onFocus={() => setFocusedInput('wallet')}
+                      onBlur={() => setFocusedInput('')}
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                      marginBottom: '0.5rem',
+                      color: 'rgba(255, 255, 255, 0.8)'
+                    }}>
+                      Signature
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showSignature ? "text" : "password"}
+                        placeholder="Enter signature"
+                        style={{
+                          ...styles.input,
+                          paddingRight: '3rem',
+                          fontFamily: 'monospace',
+                          ...(focusedInput === 'signature' ? styles.inputFocus : {})
+                        }}
+                        value={loginForm.signature}
+                        onChange={(e) => setLoginForm({...loginForm, signature: e.target.value})}
+                        onFocus={() => setFocusedInput('signature')}
+                        onBlur={() => setFocusedInput('')}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSignature(!showSignature)}
+                        style={{
+                          position: 'absolute',
+                          right: '1rem',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          color: 'rgba(255, 255, 255, 0.6)',
+                          cursor: 'pointer',
+                          padding: '0.25rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'color 0.3s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.color = '#a855f7'}
+                        onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.6)'}
+                      >
+                        {showSignature ? <EyeOff size={20} /> : <Eye size={20} />}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div style={{ display: 'flex', gap: '1rem' }}>
+                    <motion.button
+                      type="button"
+                      onClick={() => setUserType('guest')}
+                      style={{
+                        ...styles.neonButton,
+                        flex: 1,
+                        justifyContent: 'center',
+                        borderColor: 'rgba(255, 255, 255, 0.3)',
+                        color: 'rgba(255, 255, 255, 0.7)'
+                      }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      Back to Guest View
+                    </motion.button>
+                    
+                    <motion.button 
+                      type="submit"
+                      disabled={loading}
+                      style={{
+                        ...styles.neonButton,
+                        flex: 1,
+                        justifyContent: 'center',
+                        background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                        border: 'none',
+                        color: 'white',
+                        fontSize: '1rem',
+                        fontWeight: '600',
+                        boxShadow: '0 4px 20px rgba(168, 85, 247, 0.4)'
+                      }}
+                      whileHover={{ 
+                        scale: 1.02, 
+                        boxShadow: '0 6px 30px rgba(168, 85, 247, 0.6)' 
+                      }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      {loading ? (
+                        <div style={{
+                          width: '20px',
+                          height: '20px',
+                          border: '2px solid rgba(255, 255, 255, 0.3)',
+                          borderTop: '2px solid white',
+                          borderRadius: '50%',
+                          animation: 'spin 1s linear infinite'
+                        }} />
+                      ) : (
+                        'LOGIN'
+                      )}
+                    </motion.button>
+                  </div>
+                </form>
+              </motion.div>
+            </motion.div>
+          )}
+
           {(userType === 'guest' || userType === 'registered') && (
             <motion.div
               key="dashboard"
@@ -434,25 +531,11 @@ const ReferralDashboard = () => {
                   trend={8.5}
                 />
                 <StatCard 
-                  title="BeTyche Bonus" 
-                  value={`${formatCurrency(referralData.bonusTokens.BeTyche)} BeTyche`}
+                  title="Total Bonus Earned" 
+                  value={`${formatCurrency(referralData.totalBonusEarned)} ${referralData.bonusToken}`}
                   icon={Gift}
                   color="#22c55e"
                   trend={12.3}
-                />
-                <StatCard 
-                  title="SOL Bonus" 
-                  value={`${formatCurrency(referralData.bonusTokens.SOL)} SOL`}
-                  icon={Gift}
-                  color="#f59e0b"
-                  trend={8.7}
-                />
-                <StatCard 
-                  title="RADBRO Bonus" 
-                  value={`${formatCurrency(referralData.bonusTokens.RADBRO)} RADBRO`}
-                  icon={Gift}
-                  color="#ef4444"
-                  trend={15.2}
                 />
                 <StatCard 
                   title="Referral Code" 
@@ -893,34 +976,17 @@ const ReferralDashboard = () => {
                                 fontWeight: 600
                               }}>
                                 <div style={{
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  gap: '0.25rem',
-                                  alignItems: 'flex-end'
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.5rem',
+                                  padding: '0.5rem 1rem',
+                                  background: 'rgba(34, 197, 94, 0.1)',
+                                  borderRadius: '8px',
+                                  border: '1px solid rgba(34, 197, 94, 0.2)',
+                                  color: '#22c55e'
                                 }}>
-                                  <div style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.5rem',
-                                    padding: '0.5rem 1rem',
-                                    background: 'rgba(34, 197, 94, 0.1)',
-                                    borderRadius: '8px',
-                                    border: '1px solid rgba(34, 197, 94, 0.2)',
-                                    color: '#22c55e',
-                                    fontSize: '0.875rem'
-                                  }}>
-                                    <Gift size={16} />
-                                    +{formatCurrency(entry.bonusEarned)} Total
-                                  </div>
-                                  {entry.bonusTokens && (
-                                    <div style={{
-                                      fontSize: '0.75rem',
-                                      color: 'rgba(255, 255, 255, 0.6)',
-                                      textAlign: 'right'
-                                    }}>
-                                      {formatBonusTokens(entry.bonusTokens)}
-                                    </div>
-                                  )}
+                                  <Gift size={16} />
+                                  +{formatCurrency(entry.bonusEarned)} {referralData.bonusToken}
                                 </div>
                               </td>
                             </motion.tr>
@@ -946,7 +1012,7 @@ const ReferralDashboard = () => {
                 </motion.div>
               )}
 
-              {/* Limited Guest View */}
+              {/* Guest User Notice */}
               {userType === 'guest' && (
                 <motion.div 
                   style={{
@@ -994,7 +1060,7 @@ const ReferralDashboard = () => {
                         color: 'rgba(255, 255, 255, 0.7)',
                         fontSize: '0.875rem'
                       }}>
-                        You're viewing basic referral statistics as it is
+                        You're viewing basic referral statistics
                       </p>
                     </div>
                   </div>
@@ -1064,7 +1130,7 @@ const ReferralDashboard = () => {
                         color: 'rgba(255, 255, 255, 0.6)',
                         marginBottom: '0.5rem'
                       }}>
-                        Registered Users Only
+                        Login Required
                       </h4>
                       <ul style={{
                         listStyle: 'none',
@@ -1106,30 +1172,27 @@ const ReferralDashboard = () => {
                   </div>
                   
                   <motion.button
-                    onClick={() => {
-                      // Navigate to pulse auth - you can implement this based on your routing
-                      window.location.href = '/pulse-auth';
-                    }}
+                    onClick={() => setUserType('login')}
                     style={{
                       ...styles.neonButton,
                       width: '100%',
                       justifyContent: 'center',
-                      background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                      background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
                       border: 'none',
                       color: 'white',
                       fontSize: '1rem',
                       fontWeight: '600',
                       padding: '1rem',
-                      boxShadow: '0 4px 20px rgba(168, 85, 247, 0.3)'
+                      boxShadow: '0 4px 20px rgba(59, 130, 246, 0.3)'
                     }}
                     whileHover={{ 
                       scale: 1.02, 
-                      boxShadow: '0 6px 30px rgba(168, 85, 247, 0.5)' 
+                      boxShadow: '0 6px 30px rgba(59, 130, 246, 0.5)' 
                     }}
                     whileTap={{ scale: 0.98 }}
                   >
                     <UserPlus size={20} />
-                    Create Your Pulse Account
+                    Login to View Complete History
                   </motion.button>
                 </motion.div>
               )}

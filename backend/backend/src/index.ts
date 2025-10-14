@@ -2,21 +2,10 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-// Validate JWT_SECRET
-if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
-  console.error("❌ JWT_SECRET must be defined in .env file and at least 32 characters long");
-  process.exit(1);
-}
-if (process.env.NODE_ENV === 'production') {
-  if (!process.env.SHARED_SECRET_For_PRIVATE_KEY || process.env.SHARED_SECRET_For_PRIVATE_KEY.length < 32) {
-    console.error("❌ SHARED_SECRET_For_PRIVATE_KEY must be defined in .env file and at least 32 characters long (production)");
-    process.exit(1);
-  }
-}
 import express, { Application } from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
-import { seedAdmin,createSettings } from './scripts/seedAdmin';
+import { seedAdmin } from './scripts/seedAdmin';
 // import dotenv from 'dotenv';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -43,8 +32,8 @@ const server = http.createServer(app);
 const io = new SocketServer(server, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? process.env.FRONTEND_PRODUCTION_URL 
-      :"http://localhost:3000",
+      ? ['https://flourishing-tartufo-9040fe.netlify.app', 'https://flourishing-tartufo-9040fe.netlify.app'] 
+      :"*",
     methods: ['GET', 'POST'],
     credentials: true
   },
@@ -62,8 +51,8 @@ app.use(helmet({
 // CORS configuration
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_PRODUCTION_URL
-    :"http://localhost:3000",
+    ? ['https://flourishing-tartufo-9040fe.netlify.app', 'https://flourishing-tartufo-9040fe.netlify.app']
+    :"*",
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -98,7 +87,7 @@ app.get('/', (req, res) => {
 
 // Connect to MongoDB and start server
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || "";
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/pulse';
 
 mongoose
   .connect(MONGODB_URI)
@@ -106,19 +95,9 @@ mongoose
     console.log('✅ Connected to MongoDB');
     server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-      
-      // Display CORS configuration
-      const allowedOrigin = process.env.NODE_ENV === 'production' 
-        ? process.env.FRONTEND_PRODUCTION_URL 
-        : 'http://localhost:3000';
-      console.log(`🔗 CORS/Socket.IO allowed origin: ${allowedOrigin}`);
-      
-      if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_PRODUCTION_URL) {
-        console.warn('⚠️  WARNING: FRONTEND_PRODUCTION_URL not set in production mode!');
-      }
-      // seedAdmin()
-      //createSettings()
+      console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+      console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL}`);
+      //seedAdmin()
     });
   })
   .catch(error => {
