@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import Admin from '../models/admin.model';
+import User from '../models/user.model';
 
-export interface AdminRequest extends Request {
-  admin?: any;
+export interface PulseUserRequest extends Request {
+  user?: any;
 }
 
-export const adminAuth = async (
-  req: AdminRequest,
+export const pulseUserAuth = async (
+  req: PulseUserRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
@@ -23,16 +23,20 @@ export const adminAuth = async (
       return;
     }
     const decoded = jwt.verify(token, process.env.JWT_SECRET ) as any;
-    const admin = await Admin.findById(decoded.id).select('-password');
+    console.log('Decoded token:', decoded);
     
-    if (!admin || !admin.isActive) {
-      res.status(401).json({ success: false, message: 'Unauthorized' });
+    const user = await User.findById(decoded.id).select('-password');
+    console.log('User found in middleware:', user ? { id: user._id, walletAddress: user.walletAddress, wallets: user.wallets } : 'No user found');
+    
+    if (!user) {
+      res.status(401).json({ success: false, message: 'User not found' });
       return;
     }
     
-    req.admin = admin;
+    req.user = user;
     next();
   } catch (error) {
+    console.error('Middleware error:', error);
     res.status(401).json({ success: false, message: 'Invalid token' });
   }
 };

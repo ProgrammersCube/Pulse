@@ -119,7 +119,6 @@ const resetDatabase = async () => {
       });
       console.log('\n✅ Default admin created:');
       console.log('   Username: admin');
-      console.log('   Password: admin123');
     }
     
     console.log('\n✅ Database reset complete!');

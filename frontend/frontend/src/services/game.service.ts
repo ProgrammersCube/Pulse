@@ -256,7 +256,7 @@ const gameService = {
       let result = 'DRAW';
       if (isWinner) {
         result = 'WIN';
-        console.log('🎉 User won the game!');
+        console.log('User won the game!');
       } else if (isLoser) {
         result = 'LOSS';
         console.log('😢 User lost the game');

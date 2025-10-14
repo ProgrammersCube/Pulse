@@ -1,5 +1,6 @@
 import React, { useState, useEffect,useRef} from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import TreasuryManagement from './TreasuryManagement.jsx';
 import { 
@@ -7,7 +8,8 @@ import {
   Settings, Award, RefreshCw, LogOut, Copy, Check,
   AlertCircle, ChevronDown, ChevronUp, Eye, EyeOff,
   Zap, Shield, Database, Globe, BarChart3, PieChart,
-  Wallet, ArrowUpRight, ArrowDownRight, Clock,ArrowUp,ArrowDown
+  Wallet, ArrowUpRight, ArrowDownRight, Clock,ArrowUp,ArrowDown,Edit3,X,Trash2,
+  User, MoreVertical, Key
 } from 'lucide-react';
 import { styles } from '../styles/Admin-dashbaord.styles.js';
 // const API_URL = process.env.REACT_APP_API_URL || 'https://creative-communication-production.up.railway.app';
@@ -47,6 +49,7 @@ const MiniChart = ({ data, color }) => {
 };
 
 const AdminDashboard = () => {
+  const navigate = useNavigate();
   const ambassadorCodeRef = useRef(null);
   const usernameRef=useRef(null)
   const passwordRef=useRef(null)
@@ -55,6 +58,23 @@ const AdminDashboard = () => {
   const [settings, setSettings] = useState(null);
   const [stats, setStats] = useState(null);
   const [ambassadors, setAmbassadors] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [pendingRequestsLoading, setPendingRequestsLoading] = useState(false);
+  const [approvedRequests, setApprovedRequests] = useState([]);
+  const [approvedRequestsLoading, setApprovedRequestsLoading] = useState(false);
+  const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+  
+  // User Analytics State
+  const [userAnalyticsData, setUserAnalyticsData] = useState([]);
+  const [userAnalyticsLoading, setUserAnalyticsLoading] = useState(false);
+  const [userAnalyticsFilter, setUserAnalyticsFilter] = useState('all'); // 'all', 'high-volume', 'top-referrers'
+  
+  // Password Change Modal State
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState(localStorage.getItem('adminToken'));
@@ -65,6 +85,55 @@ const AdminDashboard = () => {
   const [expandedAmbassador, setExpandedAmbassador] = useState(null);
   const [copiedCode, setCopiedCode] = useState('');
   const [focusedInput, setFocusedInput] = useState('');
+  
+  // Edit Ambassador Modal State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingAmbassador, setEditingAmbassador] = useState(null);
+  const [editForm, setEditForm] = useState({
+    walletAddress: '',
+    username: '',
+    password: '',
+    ambassadorCode: '',
+    commissionRate: '',
+    payoutWalletAddress: ''
+  });
+  const [editingFields, setEditingFields] = useState({
+    walletAddress: false,
+    username: false,
+    password: false,
+    ambassadorCode: false,
+    commissionRate: false,
+    payoutWalletAddress: false
+  });
+  const [editLoading, setEditLoading] = useState(false);
+  
+  // Delete Ambassador Modal State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingAmbassador, setDeletingAmbassador] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Payment Confirmation Modal State
+  const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
+  const [paymentRequest, setPaymentRequest] = useState(null);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+
+  // Local state for House Configuration
+  const [localHouseSettings, setLocalHouseSettings] = useState({ houseFeePercentage: 0 });
+  
+  // Local state for Bet Limits
+  const [localBetLimits, setLocalBetLimits] = useState({});
+
+  // Player Net Profitability State
+  const [playerProfitabilityData, setPlayerProfitabilityData] = useState(null);
+  const [profitabilityLoading, setProfitabilityLoading] = useState(false);
+  const [selectedTimePeriod, setSelectedTimePeriod] = useState('ALL');
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [showPlayerDetailsModal, setShowPlayerDetailsModal] = useState(false);
+
+  // Net Revenue Analytics State
+  const [netRevenueData, setNetRevenueData] = useState(null);
+  const [netRevenueLoading, setNetRevenueLoading] = useState(false);
+  const [selectedRevenueTimePeriod, setSelectedRevenueTimePeriod] = useState('ALL');
 
   // Add animations
   useEffect(() => {
@@ -124,11 +193,9 @@ const AdminDashboard = () => {
 
   // Login handler
   const handleLogin = async (e) => {
-    console.log( `login called:${JSON.stringify(loginForm)}`)
     e.preventDefault();
     setError('');
     try {
-      console.log(`${API_URL}api/admin/login`)
       const response = await axios.post(`${API_URL}api/admin/login`, loginForm);
       if (response.data.success) {
         const adminToken = response.data.data.token;
@@ -148,6 +215,48 @@ const AdminDashboard = () => {
     }
   }, [token]);
 
+  // Fetch player profitability data when useranalytics tab is active
+  useEffect(() => {
+    if (activeTab === 'useranalytics' && token && !playerProfitabilityData) {
+      fetchPlayerProfitability(selectedTimePeriod);
+    }
+  }, [activeTab, token]);
+
+  // Fetch net revenue analytics when useranalytics tab is active
+  useEffect(() => {
+    if (activeTab === 'useranalytics' && token && !netRevenueData) {
+      fetchNetRevenueAnalytics(selectedRevenueTimePeriod);
+    }
+  }, [activeTab, token]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showAccountDropdown && !event.target.closest('[data-dropdown]')) {
+        setShowAccountDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showAccountDropdown]);
+
+  // Fetch pending and approved requests when ambassadors tab is active
+  useEffect(() => {
+    if (activeTab === 'ambassadors' && token) {
+      Promise.all([fetchPendingRequests(), fetchApprovedRequests()]);
+    }
+  }, [activeTab, token]);
+
+  // Fetch user analytics when walletanalytics tab is active
+  useEffect(() => {
+    if (activeTab === 'walletanalytics' && token) {
+      fetchUserAnalytics(userAnalyticsFilter);
+    }
+  }, [activeTab, token, userAnalyticsFilter]);
+
   const fetchData = async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true);
     else setLoading(true);
@@ -163,7 +272,14 @@ const AdminDashboard = () => {
       
       setSettings(settingsRes.data.data);
       setStats(statsRes.data.data);
+      console.log(ambassadorsRes.data.data)
       setAmbassadors(ambassadorsRes.data.data);
+      
+      // Initialize local house settings
+      setLocalHouseSettings({ houseFeePercentage: settingsRes.data.data?.houseFeePercentage ?? 0 });
+      
+      // Initialize local bet limits
+      setLocalBetLimits(settingsRes.data.data?.betLimits ?? {});
     } catch (error) {
       console.error('Error fetching data:', error);
       setError('Failed to fetch data');
@@ -174,6 +290,46 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  // House Configuration handlers
+  const handleHouseFeeChange = (value) => {
+    setLocalHouseSettings(prev => ({ ...prev, houseFeePercentage: value }));
+  };
+
+  const handleSaveHouseSettings = async () => {
+    try {
+      await adminApi.put('/settings', localHouseSettings);
+      setSuccess('House settings saved successfully!');
+      setTimeout(() => setSuccess(''), 3000);
+      fetchData(true);
+    } catch (error) {
+      setError('Failed to save house settings');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
+  // Bet Limits handlers
+  const handleBetLimitChange = (token, field, value) => {
+    setLocalBetLimits(prev => ({
+      ...prev,
+      [token]: {
+        ...prev[token],
+        [field]: Number(value)
+      }
+    }));
+  };
+
+  const handleSaveBetLimits = async () => {
+    try {
+      await adminApi.put('/settings', { betLimits: localBetLimits });
+      setSuccess('Bet limits saved successfully!');
+      setTimeout(() => setSuccess(''), 3000);
+      fetchData(true);
+    } catch (error) {
+      setError('Failed to save bet limits');
+      setTimeout(() => setError(''), 3000);
     }
   };
 
@@ -207,16 +363,16 @@ const AdminDashboard = () => {
     }
   };
 
-  // Calculate ambassador earnings
-  const calculateEarnings = async (ambassadorId) => {
+  // Refresh ambassador data
+  const refreshAmbassadorData = async (ambassadorId) => {
     try {
-      await adminApi.post(`/ambassadors/${ambassadorId}/calculate-earnings`);
-      fetchData(true);
-      setSuccess('Earnings calculated successfully!');
+      // Refresh data to get updated ambassador information
+      await fetchData(true);
+      setSuccess('Data refreshed successfully!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError('Error calculating earnings');
-      setTimeout(() => setError(''), 3000);
+      setError('Error refreshing data');
+      setTimeout(() => setSuccess(''), 3000);
     }
   };
 
@@ -227,6 +383,385 @@ const AdminDashboard = () => {
     setTimeout(() => setCopiedCode(''), 2000);
   };
 
+  // Handle edit ambassador
+  const handleEditAmbassador = (ambassador) => {
+    setEditingAmbassador(ambassador);
+    setEditForm({
+      walletAddress: ambassador.walletAddress || '',
+      username: ambassador.username || '',
+      password: '',
+      ambassadorCode: ambassador.ambassadorCode || '',
+      commissionRate: ambassador.commissionPercentage || '',
+      payoutWalletAddress: ambassador.payoutWalletAddress || ''
+    });
+    setEditingFields({
+      walletAddress: false,
+      username: false,
+      password: false,
+      ambassadorCode: false,
+      commissionRate: false,
+      payoutWalletAddress: false
+    });
+    setShowEditModal(true);
+  };
+
+  // Handle field edit toggle
+  const toggleFieldEdit = (field) => {
+    setEditingFields(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
+  };
+
+  // Handle form input change
+  const handleEditFormChange = (field, value) => {
+    setEditForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  // Handle save changes
+  const handleSaveChanges = async () => {
+    try {
+      setEditLoading(true);
+      
+      // Prepare update data
+      const updateData = {
+        walletAddress: editForm.walletAddress,
+        ambassadorCode: editForm.ambassadorCode,
+        commissionPercentage: parseFloat(editForm.commissionRate),
+        payoutWalletAddress: editForm.payoutWalletAddress
+      };
+
+      // Only include password if it's not empty
+      if (editForm.password.trim()) {
+        updateData.password = editForm.password;
+      }
+
+      // Make API call to update ambassador
+      await adminApi.put(`/ambassadors/${editingAmbassador._id}`, updateData);
+      
+      // Refresh data
+      await fetchData(true);
+      
+      // Close modal
+      setShowEditModal(false);
+      setEditingAmbassador(null);
+      
+      setSuccess('Ambassador updated successfully!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      console.error('Error updating ambassador:', error);
+      setError('Error updating ambassador. Please try again.');
+      setTimeout(() => setError(''), 3000);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // Handle close modal
+  const handleCloseEditModal = () => {
+    setShowEditModal(false);
+    setEditingAmbassador(null);
+    setEditForm({
+      walletAddress: '',
+      username: '',
+      password: '',
+      ambassadorCode: '',
+      commissionRate: '',
+      payoutWalletAddress: ''
+    });
+    setEditingFields({
+      walletAddress: false,
+      username: false,
+      password: false,
+      ambassadorCode: false,
+      commissionRate: false,
+      payoutWalletAddress: false
+    });
+  };
+
+  // Handle delete ambassador
+  const handleDeleteAmbassador = (ambassador) => {
+    setDeletingAmbassador(ambassador);
+    setShowDeleteModal(true);
+  };
+
+  // Handle confirm delete
+  const handleConfirmDelete = async () => {
+    try {
+      setDeleteLoading(true);
+      
+      // Make API call to delete ambassador
+      await adminApi.delete(`/ambassadors/${deletingAmbassador._id}`);
+      
+      // Refresh data
+      await fetchData(true);
+      
+      // Close modal
+      setShowDeleteModal(false);
+      setDeletingAmbassador(null);
+      
+      setSuccess('Ambassador deleted successfully!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      console.error('Error deleting ambassador:', error);
+      setError('Error deleting ambassador. Please try again.');
+      setTimeout(() => setError(''), 3000);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  // Handle cancel delete
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false);
+    setDeletingAmbassador(null);
+  };
+
+  // Handle password change for user
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordMessage({ type: 'error', text: 'Passwords do not match' });
+      return;
+    }
+    
+    if (passwordForm.newPassword.length < 6) {
+      setPasswordMessage({ type: 'error', text: 'Password must be at least 6 characters long' });
+      return;
+    }
+    
+    setPasswordLoading(true);
+    setPasswordMessage({ type: '', text: '' });
+    
+    try {
+      const response = await adminApi.post('/change-user-password', {
+        walletAddress: selectedUser.walletAddress,
+        newPassword: passwordForm.newPassword
+      });
+      
+      if (response.data.success) {
+        setPasswordMessage({ type: 'success', text: 'Password changed successfully!' });
+        setTimeout(() => {
+          setShowPasswordModal(false);
+          setPasswordForm({ newPassword: '', confirmPassword: '' });
+          setPasswordMessage({ type: '', text: '' });
+          setSelectedUser(null);
+        }, 2000);
+      } else {
+        setPasswordMessage({ type: 'error', text: response.data.message || 'Failed to change password' });
+      }
+    } catch (error) {
+      console.error('Password change error:', error);
+      setPasswordMessage({ 
+        type: 'error', 
+        text: error.response?.data?.message || 'Failed to change password. Please try again.' 
+      });
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  // Open password change modal
+  const openPasswordModal = (user) => {
+    setSelectedUser(user);
+    setShowPasswordModal(true);
+    setPasswordForm({ newPassword: '', confirmPassword: '' });
+    setPasswordMessage({ type: '', text: '' });
+  };
+
+  // Close password change modal
+  const closePasswordModal = () => {
+    setShowPasswordModal(false);
+    setSelectedUser(null);
+    setPasswordForm({ newPassword: '', confirmPassword: '' });
+    setPasswordMessage({ type: '', text: '' });
+  };
+
+  // Fetch user analytics data
+  const fetchUserAnalytics = async (filter = 'all') => {
+    setUserAnalyticsLoading(true);
+    try {
+      const response = await adminApi.get(`/dashboard/user-analytics?filter=${filter}`);
+      if (response.data.success) {
+        setUserAnalyticsData(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching user analytics:', error);
+    } finally {
+      setUserAnalyticsLoading(false);
+    }
+  };
+
+  // Fetch approved payout requests
+  const fetchApprovedRequests = async () => {
+    try {
+      setApprovedRequestsLoading(true);
+      const response = await adminApi.get('/approved-payout-requests');
+      if (response.data.success) {
+        setApprovedRequests(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching approved requests:', error);
+    } finally {
+      setApprovedRequestsLoading(false);
+    }
+  };
+
+  // Fetch pending payout requests
+  const fetchPendingRequests = async () => {
+    try {
+      setPendingRequestsLoading(true);
+      const response = await adminApi.get('/pending-payout-requests');
+      if (response.data.success) {
+        setPendingRequests(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching pending requests:', error);
+    } finally {
+      setPendingRequestsLoading(false);
+    }
+  };
+
+  // Handle approve request
+  const handleApproveRequest = async (requestId) => {
+    try {
+      console.log('Approving request:', requestId);
+      const response = await adminApi.post('/approve-payout-request', { requestId });
+      
+      if (response.data.success) {
+        // Refresh the pending requests list
+        await fetchPendingRequests();
+        await fetchApprovedRequests();
+        console.log('Request approved successfully');
+      } else {
+        console.error('Failed to approve request:', response.data.message);
+      }
+    } catch (error) {
+      console.error('Error approving request:', error);
+    }
+  };
+
+  // Handle account dropdown actions
+  const handleAccountOverview = () => {
+    setShowAccountDropdown(false);
+    navigate('/admin/account-overview');
+  };
+
+  const handleLogout = () => {
+    setShowAccountDropdown(false);
+    localStorage.removeItem('adminToken');
+    window.location.reload();
+  };
+
+  // Handle process payment confirmation
+  const handleProcessPaymentClick = (request) => {
+    setPaymentRequest(request);
+    setShowPaymentConfirmation(true);
+  };
+
+  // Handle process payment
+  const handleProcessPayment = async () => {
+    alert("Payout Execution is currently disabled")
+    return;
+    if (!paymentRequest) return;
+    
+    setPaymentLoading(true);
+    try {
+      console.log('Processing payment for request:', paymentRequest.requestId);
+      const response = await adminApi.post('/process-payment', { requestId: paymentRequest.requestId });
+      
+      if (response.data.success) {
+        // Refresh both approved and pending requests lists
+        await Promise.all([fetchApprovedRequests(), fetchPendingRequests()]);
+        console.log('Payment processed successfully');
+        setSuccess('Payment processed successfully!');
+        setTimeout(() => setSuccess(''), 3000);
+        setShowPaymentConfirmation(false);
+        setPaymentRequest(null);
+      } else {
+        console.error('Failed to process payment:', response.data.message);
+        setError(`Payment failed: ${response.data.message}`);
+        setTimeout(() => setError(''), 5000);
+      }
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      setError(`Payment error: ${error.response?.data?.message || error.message}`);
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  // Handle reject request
+  const handleRejectRequest = async (requestId) => {
+    try {
+      console.log('Rejecting request:', requestId);
+      const response = await adminApi.post('/reject-payout-request', { requestId });
+      
+      if (response.data.success) {
+        // Refresh the pending requests list
+        await fetchPendingRequests();
+        console.log('Request rejected successfully');
+      } else {
+        console.error('Failed to reject request:', response.data.message);
+      }
+    } catch (error) {
+      console.error('Error rejecting request:', error);
+    }
+  };
+
+  // Fetch player profitability data
+  const fetchPlayerProfitability = async (timePeriod = 'ALL') => {
+    setProfitabilityLoading(true);
+    try {
+      const response = await adminApi.get(`/dashboard/player-profitability?timePeriod=${timePeriod}&limit=50`);
+      setPlayerProfitabilityData(response.data.data);
+    } catch (error) {
+      console.error('Error fetching player profitability:', error);
+      setError('Failed to fetch player profitability data');
+      setTimeout(() => setError(''), 3000);
+    } finally {
+      setProfitabilityLoading(false);
+    }
+  };
+
+  // Handle time period change
+  const handleTimePeriodChange = (period) => {
+    setSelectedTimePeriod(period);
+    fetchPlayerProfitability(period);
+  };
+
+  // Handle player details modal
+  const handlePlayerClick = (player) => {
+    setSelectedPlayer(player);
+    setShowPlayerDetailsModal(true);
+  };
+
+  // Fetch net revenue analytics
+  const fetchNetRevenueAnalytics = async (timePeriod = 'ALL') => {
+    setNetRevenueLoading(true);
+    try {
+      const response = await adminApi.get(`/dashboard/net-revenue?timePeriod=${timePeriod}`);
+      setNetRevenueData(response.data.data);
+    } catch (error) {
+      console.error('Error fetching net revenue analytics:', error);
+      setError('Failed to fetch net revenue analytics');
+      setTimeout(() => setError(''), 3000);
+    } finally {
+      setNetRevenueLoading(false);
+    }
+  };
+
+  // Handle revenue time period change
+  const handleRevenueTimePeriodChange = (period) => {
+    setSelectedRevenueTimePeriod(period);
+    fetchNetRevenueAnalytics(period);
+  };
+
   // Format number with commas
   const formatNumber = (num) => {
     return new Intl.NumberFormat().format(num || 0);
@@ -235,9 +770,9 @@ const AdminDashboard = () => {
   // Format currency
   const formatCurrency = (amount, token) => {
     if (token === 'SOL' || token === 'ETH') {
-      return amount.toFixed(6);
+      return amount?.toFixed(6);
     }
-    return formatNumber(amount.toFixed(2));
+    return formatNumber(amount?.toFixed(2));
   };
   const generateUniqueCode = () => {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -261,7 +796,7 @@ const AdminDashboard = () => {
   // Login screen
   if (!token) {
     return (
-      <div style={styles.container}>
+      <div style={{...styles.container, position: 'relative', zIndex: 10}}>
         {/* Background effects */}
         <div style={styles.backgroundEffects}>
           <div style={{
@@ -459,7 +994,7 @@ const AdminDashboard = () => {
 
   if (loading) {
     return (
-      <div style={styles.container}>
+      <div style={{...styles.container, position: 'relative', zIndex: 10}}>
         <div style={{
           minHeight: '100vh',
           display: 'flex',
@@ -486,7 +1021,7 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div style={styles.container}>
+    <div style={{...styles.container, position: 'relative', zIndex: 10}}>
       {/* Background effects */}
       <div style={styles.backgroundEffects}>
         <div style={{
@@ -567,21 +1102,122 @@ const AdminDashboard = () => {
               />
             </motion.button>
             
-            <motion.button
-              onClick={() => {
-                localStorage.removeItem('adminToken');
-                window.location.reload();
-              }}
-              style={{
-                ...styles.neonButton,
-                ...styles.logoutButton
-              }}
-              whileHover={{ scale: 1.02, boxShadow: '0 0 20px rgba(239, 68, 68, 0.4)' }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <LogOut size={18} />
-              <span>Logout</span>
-            </motion.button>
+            {/* Account Dropdown */}
+            <div style={{ position: 'relative' }} data-dropdown>
+              <motion.button
+                onClick={() => setShowAccountDropdown(!showAccountDropdown)}
+                style={{
+                  ...styles.neonButton,
+                  background: 'rgba(168, 85, 247, 0.1)',
+                  borderColor: 'rgba(168, 85, 247, 0.3)',
+                  color: 'white',
+                  padding: '0.75rem 1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}
+                whileHover={{ 
+                  scale: 1.02, 
+                  background: 'rgba(168, 85, 247, 0.2)',
+                  boxShadow: '0 0 20px rgba(168, 85, 247, 0.4)' 
+                }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <User size={18} />
+                <span>Admin</span>
+                <ChevronDown 
+                  size={16} 
+                  style={{ 
+                    transform: showAccountDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s ease'
+                  }} 
+                />
+              </motion.button>
+
+              {/* Dropdown Menu */}
+              <AnimatePresence>
+                {showAccountDropdown && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                    transition={{ duration: 0.2 }}
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      right: 0,
+                      marginTop: '0.5rem',
+                      background: 'rgba(15, 23, 42, 0.95)',
+                      backdropFilter: 'blur(20px)',
+                      border: '1px solid rgba(168, 85, 247, 0.3)',
+                      borderRadius: '12px',
+                      padding: '0.5rem',
+                      minWidth: '200px',
+                      boxShadow: '0 10px 40px rgba(0, 0, 0, 0.3)',
+                      zIndex: 1000
+                    }}
+                  >
+                    <motion.button
+                      onClick={handleAccountOverview}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem 1rem',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'rgba(255, 255, 255, 0.9)',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        fontSize: '0.9rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      whileHover={{ 
+                        background: 'rgba(168, 85, 247, 0.1)',
+                        color: 'white'
+                      }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <User size={16} />
+                      Account Overview
+                    </motion.button>
+                    
+                    <div style={{
+                      height: '1px',
+                      background: 'rgba(168, 85, 247, 0.2)',
+                      margin: '0.5rem 0'
+                    }} />
+                    
+                    <motion.button
+                      onClick={handleLogout}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem 1rem',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'rgba(239, 68, 68, 0.9)',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        fontSize: '0.9rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      whileHover={{ 
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        color: '#ef4444'
+                      }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <LogOut size={16} />
+                      Logout
+                    </motion.button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
       </header>
@@ -622,6 +1258,8 @@ const AdminDashboard = () => {
         <div style={styles.tabContainer} className="admin-scrollbar">
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+            { id: 'useranalytics', label: 'Revenue & Analytics', icon: Users },
+            { id: 'walletanalytics', label: 'User Analytics', icon: Users },
             { id: 'settings', label: 'Settings', icon: Settings },
             { id: 'ambassadors', label: 'Ambassadors', icon: Award },
              { id: 'activebetqueue', label: 'Active Bet Queue', icon: Award },
@@ -898,7 +1536,7 @@ const AdminDashboard = () => {
                         WebkitTextFillColor: 'transparent'
                       }}>
                         {formatNumber(
-                          stats.revenueStats.reduce((sum, stat) => sum + stat.totalFees, 0).toFixed(2)
+                          stats?.totalPlatformFees?.toFixed(6)
                         )}
                       </p>
                     </div>
@@ -917,6 +1555,463 @@ const AdminDashboard = () => {
                   </motion.div>
                 )}
               </motion.div>
+            </motion.div>
+          )}
+
+          {activeTab === 'useranalytics' && (
+            <motion.div
+              key="useranalytics"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              style={styles.contentContainer}
+            >
+              <div style={styles.sectionHeader}>
+                <h2 style={styles.sectionTitle}>User Analytics</h2>
+                <p style={styles.sectionSubtitle}>Comprehensive user behavior and engagement metrics</p>
+              </div>
+
+              {/* Player Net Profitability Section */}
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <BarChart3 size={24} color="#00ff88" />
+                  <h3 style={styles.cardTitle}>Player Net Profitability</h3>
+                </div>
+                
+                {/* Time Period Selector */}
+                <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {['ALL', '1D', '1W', '1M'].map((period) => (
+                    <button
+                      key={period}
+                      onClick={() => handleTimePeriodChange(period)}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        background: selectedTimePeriod === period ? '#00ff88' : 'rgba(255, 255, 255, 0.1)',
+                        color: selectedTimePeriod === period ? '#000' : '#fff',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '0.5rem',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        fontWeight: '500',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      {period === 'ALL' ? 'All Time' : period}
+                    </button>
+                  ))}
+                </div>
+
+                {profitabilityLoading ? (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite' }} />
+                    <p style={{ marginTop: '1rem' }}>Loading player data...</p>
+                  </div>
+                ) : playerProfitabilityData ? (
+                  <>
+                    {/* Summary Stats */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                      <div style={styles.card}>
+                        <div style={styles.cardHeader}>
+                          <Users size={20} color="#00ff88" />
+                          <h4 style={styles.cardTitle}>Total Players</h4>
+                        </div>
+                        <div style={styles.cardContent}>
+                          <div style={styles.statValue}>{formatNumber(playerProfitabilityData.summary.totalPlayers)}</div>
+                        </div>
+                      </div>
+                      <div style={styles.card}>
+                        <div style={styles.cardHeader}>
+                          <TrendingUp size={20} color="#00ff88" />
+                          <h4 style={styles.cardTitle}>Profitable Players</h4>
+                        </div>
+                        <div style={styles.cardContent}>
+                          <div style={styles.statValue}>{formatNumber(playerProfitabilityData.summary.profitablePlayers)}</div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div style={styles.card}>
+                        <div style={styles.cardHeader}>
+                          <TrendingDown size={20} color="#ff4444" />
+                          <h4 style={styles.cardTitle}>Losing Players</h4>
+                        </div>
+                        <div style={styles.cardContent}>
+                          <div style={styles.statValue}>{formatNumber(playerProfitabilityData.summary.losingPlayers)}</div>
+                        </div>
+                      </div>
+                      <div style={styles.card}>
+                        <div style={styles.cardHeader}>
+                          <DollarSign size={20} color={playerProfitabilityData.summary.totalNetPL >= 0 ? "#00ff88" : "#ff4444"} />
+                          <h4 style={styles.cardTitle}>Total Net P/L</h4>
+                        </div>
+                        <div style={styles.cardContent}>
+                          <div style={{...styles.statValue, color: playerProfitabilityData.summary.totalNetPL >= 0 ? "#00ff88" : "#ff4444"}}>
+                            ${formatNumber(playerProfitabilityData.summary.totalNetPL)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Players Table */}
+                    <div style={{ marginTop: '2rem' }}>
+                      <h4 style={{ color: '#fff', marginBottom: '1rem', fontSize: '1.1rem' }}>Player Details</h4>
+                      <div style={{ 
+                        overflowX: 'auto', 
+                        overflowY: 'auto',
+                        maxHeight: '400px',
+                        borderRadius: '0.5rem', 
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        background: 'rgba(255, 255, 255, 0.02)'
+                      }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', color: '#fff', fontSize: '0.9rem' }}>
+                          <thead>
+                            <tr style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
+                              <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Player</th>
+                              <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Total Bets</th>
+                              <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Wins</th>
+                              <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Losses</th>
+                              <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Net P/L</th>
+                              <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Win Rate</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {playerProfitabilityData.players.map((player, index) => (
+                              <tr 
+                                key={player.walletAddress}
+                                style={{ 
+                                  cursor: 'pointer',
+                                  background: index % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
+                                  transition: 'background 0.2s ease'
+                                }}
+                                onMouseEnter={(e) => e.target.parentElement.style.background = 'rgba(255, 255, 255, 0.05)'}
+                                onMouseLeave={(e) => e.target.parentElement.style.background = index % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent'}
+                                onClick={() => handlePlayerClick(player)}
+                              >
+                                <td style={{ padding: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                                  <div>
+                                    <div style={{ fontWeight: '500' }}>{player.username}</div>
+                                    <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '0.25rem' }}>
+                                      {player.walletAddress.substring(0, 10)}...
+                                    </div>
+                                  </div>
+                                </td>
+                                <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                                  {formatNumber(player.totalBets)}
+                                </td>
+                                <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: '#00ff88' }}>
+                                  ${formatNumber(player.totalWins)}
+                                </td>
+                                <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: '#ff4444' }}>
+                                  ${formatNumber(player.totalLosses)}
+                                </td>
+                                <td style={{ 
+                                  padding: '1rem', 
+                                  textAlign: 'right', 
+                                  borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                                  color: player.netPL >= 0 ? '#00ff88' : '#ff4444',
+                                  fontWeight: '500'
+                                }}>
+                                  ${formatNumber(player.netPL)}
+                                </td>
+                                <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                                  {player?.winRate?.toFixed(1)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    <p>No player data available</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Net Revenue Box Section */}
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <DollarSign size={24} color="#00ff88" />
+                  <h3 style={styles.cardTitle}>Net Revenue Analytics</h3>
+                </div>
+                
+                {/* Time Period Selector */}
+                <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {['ALL', '1D', '1W', '1M'].map((period) => (
+                    <button
+                      key={period}
+                      onClick={() => handleRevenueTimePeriodChange(period)}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        background: selectedRevenueTimePeriod === period ? '#00ff88' : 'rgba(255, 255, 255, 0.1)',
+                        color: selectedRevenueTimePeriod === period ? '#000' : '#fff',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '0.5rem',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        fontWeight: '500',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      {period === 'ALL' ? 'All Time' : period}
+                    </button>
+                  ))}
+                </div>
+
+                {netRevenueLoading ? (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite' }} />
+                    <p style={{ marginTop: '1rem' }}>Loading revenue data...</p>
+                  </div>
+                ) : netRevenueData ? (
+                  <>
+                    {/* Formula Display */}
+                    <div style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      marginBottom: '1rem',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}>
+                      <h4 style={{ color: '#fff', marginBottom: '0.5rem', fontSize: '1rem' }}>Net Revenue Formula</h4>
+                      <p style={{ color: '#888', fontSize: '0.9rem', margin: 0 }}>
+                        Net Revenue = (Total Losses + Platform Fees) - Total Wins
+                      </p>
+                    </div>
+
+                    {/* Overall Net Revenue */}
+                    <div style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      borderRadius: '8px',
+                      padding: '1.5rem',
+                      marginBottom: '1rem',
+                      textAlign: 'center'
+                    }}>
+                      <h4 style={{ color: '#fff', marginBottom: '0.5rem' }}>Total Net Revenue</h4>
+                      <div style={{
+                        fontSize: '2rem',
+                        fontWeight: 'bold',
+                        color: netRevenueData.overall.netRevenue >= 0 ? '#00ff88' : '#ff4444'
+                      }}>
+                        ${formatNumber(netRevenueData.overall.netRevenue)}
+                      </div>
+                    </div>
+
+                    {/* Token Breakdown */}
+                    <div style={{ marginTop: '1rem' }}>
+                      <h4 style={{ color: '#fff', marginBottom: '1rem', fontSize: '1.1rem' }}>Revenue by Token</h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                        {netRevenueData.tokenBreakdown.map((token) => (
+                          <div key={token.token} style={{
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            borderRadius: '8px',
+                            padding: '1rem',
+                            border: '1px solid rgba(255, 255, 255, 0.1)'
+                          }}>
+                            <h5 style={{ color: '#fff', marginBottom: '0.5rem', fontSize: '1rem' }}>{token.token}</h5>
+                            <div style={{ marginBottom: '0.5rem' }}>
+                              <div style={{ color: '#888', fontSize: '0.8rem' }}>Net Revenue</div>
+                              <div style={{
+                                color: token.netRevenue >= 0 ? '#00ff88' : '#ff4444',
+                                fontWeight: 'bold',
+                                fontSize: '1.1rem'
+                              }}>
+                                ${formatNumber(token.netRevenue)}
+                              </div>
+                            </div>
+                            <div style={{ marginBottom: '0.5rem' }}>
+                              <div style={{ color: '#888', fontSize: '0.8rem' }}>Fees Earned</div>
+                              <div style={{ color: '#fff', fontSize: '0.9rem' }}>
+                                ${formatNumber(token.totalFees)}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ color: '#888', fontSize: '0.8rem' }}>Volume</div>
+                              <div style={{ color: '#fff', fontSize: '0.9rem' }}>
+                                ${formatNumber(token.totalVolume)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    <p>No revenue data available</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Win/Loss Breakdown Section */}
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <BarChart3 size={24} color="#00ff88" />
+                  <h3 style={styles.cardTitle}>Win/Loss Breakdown</h3>
+                </div>
+
+                {netRevenueLoading ? (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite' }} />
+                    <p style={{ marginTop: '1rem' }}>Loading breakdown data...</p>
+                  </div>
+                ) : netRevenueData ? (
+                  <>
+                    {/* Overall Breakdown */}
+                    <div style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      borderRadius: '8px',
+                      padding: '1.5rem',
+                      marginBottom: '1rem'
+                    }}>
+                      <h4 style={{ color: '#fff', marginBottom: '1rem', fontSize: '1.1rem' }}>Overall Breakdown</h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ color: '#00ff88', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                            ${formatNumber(netRevenueData.overall.totalWins)}
+                          </div>
+                          <div style={{ color: '#888', fontSize: '0.9rem' }}>Total Wins</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ color: '#ff4444', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                            ${formatNumber(netRevenueData.overall.totalLosses)}
+                          </div>
+                          <div style={{ color: '#888', fontSize: '0.9rem' }}>Total Losses</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ color: '#fff', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                            {netRevenueData?.overall?.winRate?.toFixed(1)}%
+                          </div>
+                          <div style={{ color: '#888', fontSize: '0.9rem' }}>Win Rate</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Per Token Breakdown */}
+                    <div>
+                      <h4 style={{ color: '#fff', marginBottom: '1rem', fontSize: '1.1rem' }}>Breakdown by Token</h4>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', color: '#fff', fontSize: '0.9rem' }}>
+                          <thead>
+                            <tr style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
+                              <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Token</th>
+                              <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Wins</th>
+                              <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Losses</th>
+                              <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Win Rate</th>
+                              <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Volume</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {netRevenueData.tokenBreakdown.map((token, index) => (
+                              <tr key={token.token} style={{
+                                background: index % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent'
+                              }}>
+                                <td style={{ padding: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                                  <div style={{ fontWeight: '500' }}>{token.token}</div>
+                                </td>
+                                <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: '#00ff88' }}>
+                                  ${formatNumber(token.totalWins)}
+                                </td>
+                                <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: '#ff4444' }}>
+                                  ${formatNumber(token.totalLosses)}
+                                </td>
+                                <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                                  {token?.winRate?.toFixed(1)}%
+                                </td>
+                                <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                                  ${formatNumber(token.totalVolume)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    <p>No breakdown data available</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Profitability by Token Section */}
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <PieChart size={24} color="#00ff88" />
+                  <h3 style={styles.cardTitle}>Profitability by Token</h3>
+                </div>
+
+                {netRevenueLoading ? (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite' }} />
+                    <p style={{ marginTop: '1rem' }}>Loading profitability data...</p>
+                  </div>
+                ) : netRevenueData ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
+                    {netRevenueData.tokenBreakdown.map((token) => (
+                      <div key={token.token} style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        borderRadius: '12px',
+                        padding: '1.5rem',
+                        border: '1px solid rgba(255, 255, 255, 0.1)'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                          <h4 style={{ color: '#fff', margin: 0, fontSize: '1.1rem' }}>{token.token}</h4>
+                          <div style={{
+                            padding: '0.25rem 0.75rem',
+                            borderRadius: '20px',
+                            background: token.netRevenue >= 0 ? 'rgba(0, 255, 136, 0.2)' : 'rgba(255, 68, 68, 0.2)',
+                            color: token.netRevenue >= 0 ? '#00ff88' : '#ff4444',
+                            fontSize: '0.8rem',
+                            fontWeight: '500'
+                          }}>
+                            {token.netRevenue >= 0 ? 'Profitable' : 'Loss'}
+                          </div>
+                        </div>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div>
+                            <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '0.25rem' }}>Net Revenue</div>
+                            <div style={{
+                              color: token.netRevenue >= 0 ? '#00ff88' : '#ff4444',
+                              fontSize: '1.2rem',
+                              fontWeight: 'bold'
+                            }}>
+                              ${formatNumber(token.netRevenue)}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '0.25rem' }}>Fees Earned</div>
+                            <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                              ${formatNumber(token.totalFees)}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '0.25rem' }}>Total Volume</div>
+                            <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                              ${formatNumber(token.totalVolume)}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '0.25rem' }}>Total Bets</div>
+                            <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                              {formatNumber(token.totalBets)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    <p>No profitability data available</p>
+                  </div>
+                )}
+              </div>
             </motion.div>
           )}
 
@@ -1725,7 +2820,7 @@ const AdminDashboard = () => {
                 </h4>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  {Object.keys(settings.betLimits).map((token) => (
+                  {Object.keys(localBetLimits).map((token) => (
                     <div key={token} style={{
                       display: 'grid',
                       gridTemplateColumns: '120px 1fr 1fr',
@@ -1762,16 +2857,8 @@ const AdminDashboard = () => {
                         </label>
                         <input
                           type="number"
-                          value={settings.betLimits[token].min}
-                          onChange={(e) => updateSettings({
-                            betLimits: {
-                              ...settings.betLimits,
-                              [token]: {
-                                ...settings.betLimits[token],
-                                min: Number(e.target.value)
-                              }
-                            }
-                          })}
+                          value={localBetLimits[token]?.min || 0}
+                          onChange={(e) => handleBetLimitChange(token, 'min', e.target.value)}
                           style={styles.input}
                           step="0.000001"
                         />
@@ -1787,16 +2874,8 @@ const AdminDashboard = () => {
                         </label>
                         <input
                           type="number"
-                          value={settings.betLimits[token].max}
-                          onChange={(e) => updateSettings({
-                            betLimits: {
-                              ...settings.betLimits,
-                              [token]: {
-                                ...settings.betLimits[token],
-                                max: Number(e.target.value)
-                              }
-                            }
-                          })}
+                          value={localBetLimits[token]?.max || 0}
+                          onChange={(e) => handleBetLimitChange(token, 'max', e.target.value)}
                           style={styles.input}
                           step="0.000001"
                         />
@@ -1823,10 +2902,7 @@ const AdminDashboard = () => {
                     boxShadow: '0 0 30px rgba(34, 197, 94, 0.4)'
                   }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    setSuccess('Token settings saved successfully!');
-                    setTimeout(() => setSuccess(''), 3000);
-                  }}
+                  onClick={handleSaveBetLimits}
                 >
                   <Check size={20} />
                   Save Token Settings
@@ -2096,7 +3172,8 @@ const AdminDashboard = () => {
                       <input
                         type="text"
                         value={settings.houseWalletAddress}
-                        onChange={(e) => updateSettings({ houseWalletAddress: e.target.value })}
+                        readOnly
+                        // onChange={(e) => updateSettings({ houseWalletAddress: e.target.value })}
                         style={{
                           ...styles.input,
                           fontFamily: 'monospace',
@@ -2142,21 +3219,21 @@ const AdminDashboard = () => {
                         fontWeight: '600',
                         color: '#a855f7'
                       }}>
-                        {settings.houseFeePercentage}%
+                        {localHouseSettings.houseFeePercentage}%
                       </span>
                     </label>
                     <input
                       type="range"
                       min="0"
-                      max="20"
+                      max="50"
                       step="0.5"
-                      value={settings.houseFeePercentage}
-                      onChange={(e) => updateSettings({ houseFeePercentage: Number(e.target.value) })}
+                      value={localHouseSettings.houseFeePercentage}
+                      onChange={(e) => handleHouseFeeChange(Number(e.target.value))}
                       style={{
                         width: '100%',
                         height: '8px',
                         borderRadius: '4px',
-                        background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${settings.houseFeePercentage * 5}%, rgba(255, 255, 255, 0.1) ${settings.houseFeePercentage * 5}%, rgba(255, 255, 255, 0.1) 100%)`,
+                        background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${localHouseSettings.houseFeePercentage * 2}%, rgba(255, 255, 255, 0.1) ${localHouseSettings.houseFeePercentage * 2}%, rgba(255, 255, 255, 0.1) 100%)`,
                         outline: 'none',
                         cursor: 'pointer',
                         WebkitAppearance: 'none'
@@ -2170,8 +3247,8 @@ const AdminDashboard = () => {
                       marginTop: '0.5rem'
                     }}>
                       <span>0%</span>
-                      <span>10%</span>
-                      <span>20%</span>
+                      <span>25%</span>
+                      <span>50%</span>
                     </div>
                   </div>
                 </div>
@@ -2194,14 +3271,338 @@ const AdminDashboard = () => {
                     boxShadow: '0 0 30px rgba(139, 92, 246, 0.4)'
                   }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    setSuccess('House settings saved successfully!');
-                    setTimeout(() => setSuccess(''), 3000);
-                  }}
+                  onClick={handleSaveHouseSettings}
                 >
                   <Check size={20} />
                   Save House Settings
                 </motion.button>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {activeTab === 'walletanalytics' && (
+            <motion.div
+              key="walletanalytics"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}
+            >
+              {/* User Analytics Header */}
+              <motion.div
+                style={styles.card}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+              >
+                <div style={styles.cardGlow} />
+                
+                <h2 style={{
+                  fontSize: '2rem',
+                  fontWeight: 'bold',
+                  color: 'white',
+                  marginBottom: '1.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem'
+                }}>
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%)',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Users size={24} color="white" />
+                  </div>
+                  User Analytics
+                </h2>
+
+                {/* Filter Buttons */}
+                <div style={{
+                  display: 'flex',
+                  gap: '1rem',
+                  marginBottom: '2rem',
+                  flexWrap: 'wrap'
+                }}>
+                  {[
+                    { id: 'all', label: 'All Users' },
+                    // { id: 'high-volume', label: 'High Volume' },
+                    // { id: 'top-referrers', label: 'Top Referrers' }
+                  ].map((filter) => (
+                    <motion.button
+                      key={filter.id}
+                      onClick={() => {
+                        setUserAnalyticsFilter(filter.id);
+                        fetchUserAnalytics(filter.id);
+                      }}
+                      style={{
+                        ...styles.neonButton,
+                        background: userAnalyticsFilter === filter.id 
+                          ? 'rgba(59, 130, 246, 0.2)' 
+                          : 'rgba(59, 130, 246, 0.1)',
+                        borderColor: userAnalyticsFilter === filter.id 
+                          ? 'rgba(59, 130, 246, 0.5)' 
+                          : 'rgba(59, 130, 246, 0.3)',
+                        color: userAnalyticsFilter === filter.id ? '#3b82f6' : 'rgba(59, 130, 246, 0.8)',
+                        padding: '0.75rem 1.5rem'
+                      }}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      {filter.label}
+                    </motion.button>
+                  ))}
+                </div>
+
+                {/* Summary Statistics */}
+                {userAnalyticsData.length > 0 && (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '1rem',
+                    marginBottom: '2rem'
+                  }}>
+                    <div style={{
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      border: '1px solid rgba(59, 130, 246, 0.2)',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#3b82f6' }}>
+                        {userAnalyticsData.length}
+                      </div>
+                      <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+                        Total Users
+                      </div>
+                    </div>
+                    <div style={{
+                      background: 'rgba(16, 185, 129, 0.1)',
+                      border: '1px solid rgba(16, 185, 129, 0.2)',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#10b981' }}>
+                        {userAnalyticsData.filter(user => user.totalGames > 0).length}
+                      </div>
+                      <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+                        Active Players
+                      </div>
+                    </div>
+                    <div style={{
+                      background: 'rgba(168, 85, 247, 0.1)',
+                      border: '1px solid rgba(168, 85, 247, 0.2)',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#a855f7' }}>
+                        {userAnalyticsData.filter(user => user.totalVolume >= 100).length}
+                      </div>
+                      <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+                        High Volume Users
+                      </div>
+                    </div>
+                    <div style={{
+                      background: 'rgba(245, 158, 11, 0.1)',
+                      border: '1px solid rgba(245, 158, 11, 0.2)',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f59e0b' }}>
+                        {userAnalyticsData.filter(user => user.referredUsersCount > 0).length}
+                      </div>
+                      <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+                        Referrers
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Responsive Table Container */}
+                <div style={{
+                  width: '100%',
+                  overflowX: 'auto',
+                  WebkitOverflowScrolling: 'touch' // Smooth scrolling on iOS
+                }}>
+                  {/* User Analytics Table */}
+                  <div style={{
+                    background: 'rgba(30, 41, 59, 0.5)',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                    minWidth: '1300px' // Increased to accommodate wider username column
+                  }}>
+                    {/* Table Container with fixed width for responsiveness */}
+                    <div style={{
+                      width: '100%'
+                    }}>
+                      {/* Table Header */}
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1.5fr 1.5fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr',
+                        gap: '0.75rem',
+                        padding: '1rem',
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        borderBottom: '1px solid rgba(59, 130, 246, 0.2)',
+                        fontWeight: 'bold',
+                        fontSize: '0.8rem',
+                        color: 'rgba(255, 255, 255, 0.9)',
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 10
+                      }}>
+                        <div>Wallet Address</div>
+                        <div>Username</div>
+                        <div>Type</div>
+                        <div>Games</div>
+                        <div>Volume</div>
+                        <div>Wins</div>
+                        <div>Losses</div>
+                        <div>Net P/L</div>
+                        <div>Referrer</div>
+                        <div>Join Date</div>
+                        <div>Actions</div>
+                      </div>
+
+                      {/* Table Content */}
+                      <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
+                        {userAnalyticsLoading ? (
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '3rem',
+                            color: 'rgba(255, 255, 255, 0.6)'
+                          }}>
+                            <div style={{
+                              width: '40px',
+                              height: '40px',
+                              border: '4px solid rgba(59, 130, 246, 0.3)',
+                              borderTop: '4px solid #3b82f6',
+                              borderRadius: '50%',
+                              animation: 'spin 1s linear infinite'
+                            }} />
+                            <span style={{ marginLeft: '1rem' }}>Loading user analytics...</span>
+                          </div>
+                        ) : userAnalyticsData.length === 0 ? (
+                          <div style={{
+                            textAlign: 'center',
+                            padding: '3rem',
+                            color: 'rgba(255, 255, 255, 0.6)'
+                          }}>
+                            No user data available
+                          </div>
+                        ) : (
+                          userAnalyticsData.map((user, index) => (
+                            <motion.div
+                              key={user.walletAddress || index}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1.5fr 1.5fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr',
+                              gap: '0.75rem',
+                              padding: '1rem',
+                              borderBottom: index < userAnalyticsData.length - 1 ? '1px solid rgba(59, 130, 246, 0.1)' : 'none',
+                              color: 'rgba(255, 255, 255, 0.8)',
+                              fontSize: '0.8rem',
+                              transition: 'background-color 0.2s ease',
+                              cursor: 'pointer'
+                            }}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.3, delay: index * 0.05 }}
+                              onMouseEnter={(e) => {
+                                e.target.style.backgroundColor = 'rgba(59, 130, 246, 0.05)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.backgroundColor = 'transparent';
+                              }}
+                            >
+                              <div style={{
+                                fontFamily: 'monospace',
+                                fontSize: '0.75rem',
+                                minWidth: '120px' // Ensure minimum width for wallet address
+                              }}>
+                                {user.walletAddress ? 
+                                  `${user.walletAddress.substring(0, 6)}...${user.walletAddress.substring(user.walletAddress.length - 6)}` 
+                                  : 'N/A'
+                                }
+                              </div>
+                              <div style={{ fontSize: '0.75rem', minWidth: '150px' }}>
+                                {user.loginType === 'registered' ? (user.userName || 'N/A') : '--'}
+                              </div>
+                              <div style={{ 
+                                fontSize: '0.75rem',
+                                color: user.loginType === 'registered' ? '#10b981' : '#f59e0b',
+                                fontWeight: 'bold',
+                                minWidth: '60px'
+                              }}>
+                                {user.loginType === 'registered' ? 'Registered' : 'Guest'}
+                              </div>
+                              <div style={{ minWidth: '50px' }}>{user.totalGames || 0}</div>
+                              <div style={{ minWidth: '80px' }}>{formatCurrency(user.totalVolume || 0)}</div>
+                              <div style={{ color: '#10b981', minWidth: '50px' }}>{user.wins || 0}</div>
+                              <div style={{ color: '#ef4444', minWidth: '50px' }}>{user.losses || 0}</div>
+                              <div style={{ 
+                                color: (user.netPL || 0) >= 0 ? '#10b981' : '#ef4444',
+                                fontWeight: 'bold',
+                                minWidth: '80px'
+                              }}>
+                                {formatCurrency(user.netPL || 0)}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', minWidth: '60px' }}>
+                                {user.referrer ? 
+                                  `${user.referrer.substring(0, 4)}...` 
+                                  : 'Direct'
+                                }
+                              </div>
+                              <div style={{ fontSize: '0.75rem', minWidth: '80px' }}>
+                                {user.joinDate ? 
+                                  new Date(user.joinDate).toLocaleDateString() 
+                                  : 'N/A'
+                                }
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '120px' }}>
+                                {user.loginType === 'registered' && (
+                                  <motion.button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openPasswordModal(user);
+                                    }}
+                                    style={{
+                                      background: 'rgba(59, 130, 246, 0.1)',
+                                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                                      borderRadius: '6px',
+                                      padding: '0.25rem 0.5rem',
+                                      color: '#3b82f6',
+                                      fontSize: '0.7rem',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.25rem',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                  >
+                                    <Key size={12} />
+                                    Change Password
+                                  </motion.button>
+                                )}
+                              </div>
+                            </motion.div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </motion.div>
             </motion.div>
           )}
@@ -2212,7 +3613,7 @@ const AdminDashboard = () => {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '2rem', overflow: 'visible' }}
             >
 
 {/* Create Ambassador */}
@@ -2261,9 +3662,14 @@ const AdminDashboard = () => {
     }} 
     style={{ 
       display: 'grid', 
-      gridTemplateColumns: '1fr 1fr', 
-      gap: '1.5rem',
-      alignItems: 'end'
+      gridTemplateColumns: '1.2fr 0.8fr', 
+      gap: '2rem',
+      alignItems: 'end',
+      padding: '0.5rem',
+      '@media (max-width: 768px)': {
+        gridTemplateColumns: '1fr',
+        gap: '1.5rem'
+      }
     }}
   >
     {/* Wallet Address - Full Width */}
@@ -2285,7 +3691,7 @@ const AdminDashboard = () => {
     </div>
     
     {/* Username - Left Column */}
-    <div>
+    <div style={{ minWidth: '0', overflow: 'visible' }}>
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -2310,12 +3716,14 @@ const AdminDashboard = () => {
           }}
           style={{
             ...styles.neonButton,
-            padding: '0.5rem 0.75rem',
-            fontSize: '0.75rem',
+            padding: '0.4rem 0.6rem',
+            fontSize: '0.7rem',
             background: 'rgba(59, 130, 246, 0.1)',
             borderColor: 'rgba(59, 130, 246, 0.3)',
             color: '#3b82f6',
-            whiteSpace: 'nowrap'
+            whiteSpace: 'nowrap',
+            minWidth: 'auto',
+            flexShrink: 0
           }}
           whileHover={{ 
             scale: 1.05,
@@ -2339,7 +3747,7 @@ const AdminDashboard = () => {
     </div>
     
     {/* Password - Right Column */}
-    <div>
+    <div style={{ minWidth: '0', overflow: 'visible' }}>
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -2368,12 +3776,14 @@ const AdminDashboard = () => {
           }}
           style={{
             ...styles.neonButton,
-            padding: '0.5rem 0.75rem',
-            fontSize: '0.75rem',
+            padding: '0.4rem 0.6rem',
+            fontSize: '0.7rem',
             background: 'rgba(236, 72, 153, 0.1)',
             borderColor: 'rgba(236, 72, 153, 0.3)',
             color: '#ec4899',
-            whiteSpace: 'nowrap'
+            whiteSpace: 'nowrap',
+            minWidth: 'auto',
+            flexShrink: 0
           }}
           whileHover={{ 
             scale: 1.05,
@@ -2426,7 +3836,7 @@ const AdminDashboard = () => {
     </div>
     
     {/* Ambassador Code - Left Column */}
-    <div>
+    <div style={{ minWidth: '0', overflow: 'visible' }}>
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -2446,12 +3856,14 @@ const AdminDashboard = () => {
           onClick={generateUniqueCode}
           style={{
             ...styles.neonButton,
-            padding: '0.5rem 0.75rem',
-            fontSize: '0.75rem',
+            padding: '0.4rem 0.6rem',
+            fontSize: '0.7rem',
             background: 'rgba(168, 85, 247, 0.1)',
             borderColor: 'rgba(168, 85, 247, 0.3)',
             color: '#a855f7',
-            whiteSpace: 'nowrap'
+            whiteSpace: 'nowrap',
+            minWidth: 'auto',
+            flexShrink: 0
           }}
           whileHover={{ 
             scale: 1.05,
@@ -2475,7 +3887,7 @@ const AdminDashboard = () => {
     </div>
     
     {/* Commission Percentage - Right Column */}
-    <div>
+    <div style={{ minWidth: '0', overflow: 'visible' }}>
       <label style={{
         display: 'block',
         fontSize: '0.875rem',
@@ -2516,6 +3928,306 @@ const AdminDashboard = () => {
       CREATE AMBASSADOR
     </motion.button>
   </form>
+</motion.div>
+
+{/* Pending Commission Requests */}
+<motion.div 
+  style={styles.card}
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.6, delay: 0.2 }}
+>
+  <h3 style={{
+    fontSize: '1.5rem',
+    fontWeight: 'bold',
+    marginBottom: '2rem',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem'
+  }}>
+    <div style={{
+      width: '40px',
+      height: '40px',
+      background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+      borderRadius: '12px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}>
+      <Clock size={20} color="white" />
+    </div>
+    Pending Commission Requests
+  </h3>
+  
+  <div style={{
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem'
+  }}>
+    {(!pendingRequests || pendingRequests.length === 0) ? (
+      <div style={{
+        textAlign: 'center',
+        padding: '3rem 1rem',
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontSize: '1rem'
+      }}>
+        No pending commission requests
+      </div>
+    ) : (
+      (pendingRequests || []).map((request) => (
+        <div key={request.id} style={{
+          background: 'rgba(39, 23, 65, 0.4)',
+          borderRadius: '12px',
+          padding: '1.5rem',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '1rem'
+        }}>
+          <div style={{ flex: 1, minWidth: '300px' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem',
+              marginBottom: '0.5rem'
+            }}>
+              <div style={{
+                fontWeight: '600',
+                fontSize: '1.1rem',
+                color: '#f59e0b'
+              }}>
+                {request.ambassadorUsername}
+              </div>
+              <div style={{
+                background: 'rgba(168, 85, 247, 0.15)',
+                color: '#a855f7',
+                padding: '0.25rem 0.75rem',
+                borderRadius: '999px',
+                fontSize: '0.85rem'
+              }}>
+                {request.ambassadorCode}
+              </div>
+            </div>
+            <div style={{
+              fontSize: '0.9rem',
+              color: 'rgba(255, 255, 255, 0.7)',
+              marginBottom: '0.25rem'
+            }}>
+              Amount: <span style={{ color: '#10b981', fontWeight: '600' }}>
+                ${request?.amount?.toFixed(2)}
+              </span>
+            </div>
+            <div style={{
+              fontSize: '0.85rem',
+              color: 'rgba(255, 255, 255, 0.6)',
+              wordBreak: 'break-all'
+            }}>
+              Payout Wallet Address: {request.payoutWalletAddress}
+            </div>
+            <div style={{
+              fontSize: '0.8rem',
+              color: 'rgba(255, 255, 255, 0.5)',
+              marginTop: '0.5rem'
+            }}>
+              Requested: {new Date(request.requestedAt).toLocaleDateString()} at {new Date(request.requestedAt).toLocaleTimeString()}
+            </div>
+          </div>
+          
+          <div style={{
+            display: 'flex',
+            gap: '0.75rem',
+            alignItems: 'center'
+          }}>
+            <motion.button
+              onClick={() => handleApproveRequest(request.requestId)}
+              style={{
+                ...styles.neonButton,
+                background: 'rgba(16, 185, 129, 0.1)',
+                borderColor: 'rgba(16, 185, 129, 0.3)',
+                color: '#10b981',
+                padding: '0.75rem 1.5rem',
+                fontSize: '0.9rem'
+              }}
+              whileHover={{ 
+                scale: 1.05,
+                background: 'rgba(16, 185, 129, 0.2)',
+                boxShadow: '0 0 15px rgba(16, 185, 129, 0.3)'
+              }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <Check size={16} style={{ marginRight: '0.5rem' }} />
+              Approve
+            </motion.button>
+            
+            <motion.button
+              onClick={() => handleRejectRequest(request.requestId)}
+              style={{
+                ...styles.neonButton,
+                background: 'rgba(239, 68, 68, 0.1)',
+                borderColor: 'rgba(239, 68, 68, 0.3)',
+                color: '#ef4444',
+                padding: '0.75rem 1.5rem',
+                fontSize: '0.9rem'
+              }}
+              whileHover={{ 
+                scale: 1.05,
+                background: 'rgba(239, 68, 68, 0.2)',
+                boxShadow: '0 0 15px rgba(239, 68, 68, 0.3)'
+              }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <X size={16} style={{ marginRight: '0.5rem' }} />
+              Reject
+            </motion.button>
+          </div>
+        </div>
+      ))
+    )}
+  </div>
+</motion.div>
+
+{/* Approved Commission Requests */}
+<motion.div 
+  style={styles.card}
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.6, delay: 0.3 }}
+>
+  <div style={styles.cardGlow} />
+  
+  <h3 style={{
+    fontSize: '1.5rem',
+    fontWeight: 'bold',
+    marginBottom: '2rem',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    color: 'white'
+  }}>
+    <div style={{
+      width: '40px',
+      height: '40px',
+      borderRadius: '50%',
+      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%)',
+      border: '1px solid rgba(16, 185, 129, 0.3)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}>
+      <Check size={20} color="white" />
+    </div>
+    Approved Commission Requests
+  </h3>
+  
+  <div style={{
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem'
+  }}>
+    {approvedRequestsLoading ? (
+      <div style={{
+        textAlign: 'center',
+        padding: '3rem 1rem',
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontSize: '1rem'
+      }}>
+        Loading approved requests...
+      </div>
+    ) : (!approvedRequests || approvedRequests.length === 0) ? (
+      <div style={{
+        textAlign: 'center',
+        padding: '3rem 1rem',
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontSize: '1rem'
+      }}>
+        No approved commission requests
+      </div>
+    ) : (
+      (approvedRequests || []).map((request) => (
+        <div key={request.id} style={{
+          background: 'rgba(39, 23, 65, 0.4)',
+          borderRadius: '12px',
+          padding: '1.5rem',
+          border: '1px solid rgba(16, 185, 129, 0.3)',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: '1rem'
+          }}>
+            <div>
+              <h4 style={{
+                color: 'white',
+                fontSize: '1.1rem',
+                fontWeight: 'bold',
+                marginBottom: '0.5rem'
+              }}>
+                {request.ambassadorUsername}
+              </h4>
+              <p style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                fontSize: '0.9rem',
+                marginBottom: '0.25rem'
+              }}>
+                Code: {request.ambassadorCode} | Rate: {request.commissionRate}%
+              </p>
+              <p style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                fontSize: '0.9rem',
+                marginBottom: '0.25rem'
+              }}>
+                Amount: {request?.amount?.toFixed(2)} sol
+              </p>
+              <p style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                fontSize: '0.9rem',
+                marginBottom: '0.25rem'
+              }}>
+                payout wallet: {request.payoutWalletAddress.substring(0, 8)}...{request.payoutWalletAddress.substring(request.payoutWalletAddress.length - 8)}
+              </p>
+              <p style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                fontSize: '0.9rem'
+              }}>
+                Approved: {new Date(request.processedAt).toLocaleDateString()}
+              </p>
+            </div>
+            
+            <div style={{
+              display: 'flex',
+              gap: '0.75rem',
+              alignItems: 'center'
+            }}>
+              <motion.button
+                onClick={() => handleProcessPaymentClick(request)}
+                style={{
+                  ...styles.neonButton,
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  borderColor: 'rgba(16, 185, 129, 0.3)',
+                  color: '#10b981',
+                  padding: '0.75rem 1.5rem',
+                  fontSize: '0.9rem'
+                }}
+                whileHover={{ 
+                  scale: 1.05,
+                  background: 'rgba(16, 185, 129, 0.2)',
+                  boxShadow: '0 0 15px rgba(16, 185, 129, 0.3)'
+                }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Check size={16} style={{ marginRight: '0.5rem' }} />
+                Process Payment
+              </motion.button>
+            </div>
+          </div>
+        </div>
+      ))
+    )}
+  </div>
 </motion.div>
 
               {/* Ambassadors List */}
@@ -2611,6 +4323,62 @@ const AdminDashboard = () => {
                                   >
                                     {copiedCode === amb._id ? <Check size={18} /> : <Copy size={18} />}
                                   </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditAmbassador(amb);
+                                    }}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: 'rgba(255, 255, 255, 0.6)',
+                                      cursor: 'pointer',
+                                      padding: '0.25rem',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      borderRadius: '4px',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.target.style.color = '#a855f7';
+                                      e.target.style.backgroundColor = 'rgba(168, 85, 247, 0.1)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.target.style.color = 'rgba(255, 255, 255, 0.6)';
+                                      e.target.style.backgroundColor = 'transparent';
+                                    }}
+                                  >
+                                    <Edit3 size={18} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteAmbassador(amb);
+                                    }}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: 'rgba(255, 255, 255, 0.6)',
+                                      cursor: 'pointer',
+                                      padding: '0.25rem',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      borderRadius: '4px',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.target.style.color = '#ef4444';
+                                      e.target.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.target.style.color = 'rgba(255, 255, 255, 0.6)';
+                                      e.target.style.backgroundColor = 'transparent';
+                                    }}
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
                                 </div>
                                 <p style={{
                                   fontSize: '0.875rem',
@@ -2625,7 +4393,8 @@ const AdminDashboard = () => {
                             <div style={{
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '2rem'
+                              gap: '1.5rem',
+                              flexWrap: 'wrap'
                             }}>
                               <div style={{ textAlign: 'center' }}>
                                 <p style={{
@@ -2657,7 +4426,7 @@ const AdminDashboard = () => {
                                   fontWeight: 'bold',
                                   color: '#a855f7'
                                 }}>
-                                  {amb.totalReferrals}
+                                  {amb?.referredUsers?.length}
                                 </p>
                               </div>
                               
@@ -2667,14 +4436,65 @@ const AdminDashboard = () => {
                                   color: 'rgba(255, 255, 255, 0.6)',
                                   marginBottom: '0.25rem'
                                 }}>
-                                  Earnings
+                                  Total Losses
+                                </p>
+                                <p style={{
+                                  fontSize: '1.25rem',
+                                  fontWeight: 'bold',
+                                  color: '#ef4444'
+                                }}>
+                                  ${formatNumber(amb?.totalLossesGenerated?.toFixed(6))}
+                                </p>
+                              </div>
+                              
+                              <div style={{ textAlign: 'center' }}>
+                                <p style={{
+                                  fontSize: '0.75rem',
+                                  color: 'rgba(255, 255, 255, 0.6)',
+                                  marginBottom: '0.25rem'
+                                }}>
+                                  Total Wins
                                 </p>
                                 <p style={{
                                   fontSize: '1.25rem',
                                   fontWeight: 'bold',
                                   color: '#22c55e'
                                 }}>
-                                  ${formatNumber(amb.totalEarnings.toFixed(2))}
+                                  ${formatNumber(amb?.totalWinsGenerated?.toFixed(6))}
+                                </p>
+                              </div>
+                              
+                              <div style={{ textAlign: 'center' }}>
+                                <p style={{
+                                  fontSize: '0.75rem',
+                                  color: 'rgba(255, 255, 255, 0.6)',
+                                  marginBottom: '0.25rem'
+                                }}>
+                                  Net Loss
+                                </p>
+                                <p style={{
+                                  fontSize: '1.25rem',
+                                  fontWeight: 'bold',
+                                  color: amb.totalNetLoss > 0 ? '#ef4444' : '#22c55e'
+                                }}>
+                                  ${formatNumber(amb?.totalNetLoss?.toFixed(6))}
+                                </p>
+                              </div>
+                              
+                              <div style={{ textAlign: 'center' }}>
+                                <p style={{
+                                  fontSize: '0.75rem',
+                                  color: 'rgba(255, 255, 255, 0.6)',
+                                  marginBottom: '0.25rem'
+                                }}>
+                                  Total Earnings
+                                </p>
+                                <p style={{
+                                  fontSize: '1.25rem',
+                                  fontWeight: 'bold',
+                                  color: amb.totalEarnings < 0 ? '#ef4444' : '#f59e0b'
+                                }}>
+                                  ${amb?.totalEarnings < 0 ? '0.00' : formatNumber(amb?.totalEarnings?.toFixed(6))}
                                 </p>
                               </div>
                               
@@ -2731,10 +4551,10 @@ const AdminDashboard = () => {
                                     gap: '0.5rem'
                                   }}>
                                     <Clock size={18} style={{ color: '#a855f7' }} />
-                                    Recent Earnings
+                                    Recent Loss Bets
                                   </h5>
                                   <motion.button
-                                    onClick={() => calculateEarnings(amb._id)}
+                                    onClick={() => refreshAmbassadorData(amb._id)}
                                     style={{
                                       ...styles.neonButton,
                                       borderColor: '#3b82f6',
@@ -2745,11 +4565,11 @@ const AdminDashboard = () => {
                                     whileHover={{ scale: 1.02, borderColor: '#60a5fa' }}
                                     whileTap={{ scale: 0.98 }}
                                   >
-                                    Calculate Earnings
+                                    Refresh Data
                                   </motion.button>
                                 </div>
                                 
-                                {amb.earnings && amb.earnings.length > 0 ? (
+                                                                {amb.recentLossBets && amb.recentLossBets.length > 0 ? (
                                   <div style={{
                                     display: 'flex',
                                     flexDirection: 'column',
@@ -2757,7 +4577,7 @@ const AdminDashboard = () => {
                                     maxHeight: '300px',
                                     overflowY: 'auto'
                                   }} className="admin-scrollbar">
-                                    {amb.earnings.slice(0, 10).map((earning, idx) => (
+                                    {amb.recentLossBets.map((bet, idx) => (
                                       <motion.div 
                                         key={idx}
                                         initial={{ opacity: 0, x: -20 }}
@@ -2778,13 +4598,13 @@ const AdminDashboard = () => {
                                             fontSize: '0.875rem',
                                             marginBottom: '0.25rem'
                                           }}>
-                                            User: {earning.userId.slice(0, 8)}...
+                                            User: {bet.userId.slice(0, 8)}...
                                           </p>
                                           <p style={{
                                             fontSize: '0.75rem',
                                             color: 'rgba(255, 255, 255, 0.5)'
                                           }}>
-                                            {new Date(earning.date).toLocaleDateString()}
+                                            {bet.formattedDate || 'Date not available'}
                                           </p>
                                         </div>
                                         
@@ -2794,13 +4614,13 @@ const AdminDashboard = () => {
                                             color: 'rgba(255, 255, 255, 0.6)',
                                             marginBottom: '0.25rem'
                                           }}>
-                                            Loss: {formatCurrency(earning.userLoss, earning.token)} {earning.token}
+                                            Loss: {formatCurrency(bet.amount, bet.token)} {bet.token}
                                           </p>
                                           <p style={{
                                             color: '#22c55e',
                                             fontWeight: '600'
                                           }}>
-                                            +{formatCurrency(earning.amount, earning.token)} {earning.token}
+                                            +{formatCurrency((bet.amount * amb.commissionPercentage / 100), bet.token)} {bet.token}
                                           </p>
                                         </div>
                                       </motion.div>
@@ -2813,9 +4633,9 @@ const AdminDashboard = () => {
                                     color: 'rgba(255, 255, 255, 0.4)'
                                   }}>
                                     <Wallet size={48} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
-                                    <p>No earnings calculated yet</p>
+                                    <p>No loss bets found yet</p>
                                     <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
-                                      Click "Calculate Earnings" to process commissions
+                                      Loss bets from referred users will appear here
                                     </p>
                                   </div>
                                 )}
@@ -2846,7 +4666,7 @@ const AdminDashboard = () => {
                                         <tr style={{ background: 'rgba(168,85,247,0.07)' }}>
                                           <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>Wallet Address</th>
                                           <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>Username / Email</th>
-                                          <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>Registered</th>
+                                          <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>Status</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -2854,7 +4674,7 @@ const AdminDashboard = () => {
                                           <tr key={user._id || user.walletAddress || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                                             <td style={{ padding: '0.75rem', fontFamily: 'monospace' }}>{user.walletAddress ? `${user.walletAddress.slice(0,8)}...${user.walletAddress.slice(-6)}` : '-'}</td>
                                             <td style={{ padding: '0.75rem' }}>{user.username || user.email || '-'}</td>
-                                            <td style={{ padding: '0.75rem' }}>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}</td>
+                                            <td style={{ padding: '0.75rem' }}>{user.loginType === 'registered' ? 'Registered' : 'Guest'}</td>
                                           </tr>
                                         ))}
                                       </tbody>
@@ -3002,7 +4822,974 @@ const AdminDashboard = () => {
 )}
 {activeTab === 'treasury' && <TreasuryManagement />}
         </AnimatePresence>
+
+        {/* Edit Ambassador Modal */}
+        <AnimatePresence>
+          {showEditModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1000,
+                padding: '1rem'
+              }}
+              onClick={handleCloseEditModal}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                style={{
+                  background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+                  borderRadius: '20px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  padding: '2rem',
+                  maxWidth: '600px',
+                  width: '100%',
+                  maxHeight: '90vh',
+                  overflowY: 'auto'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '2rem'
+                }}>
+                  <h2 style={{
+                    fontSize: '1.5rem',
+                    fontWeight: 'bold',
+                    color: 'white',
+                    margin: 0
+                  }}>
+                    Edit Ambassador
+                  </h2>
+                  <button
+                    onClick={handleCloseEditModal}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      cursor: 'pointer',
+                      padding: '0.5rem',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {/* Wallet Address */}
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '0.5rem',
+                      color: 'rgba(255, 255, 255, 0.8)',
+                      fontWeight: '500'
+                    }}>
+                      Wallet Address
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={editForm.walletAddress}
+                        onChange={(e) => handleEditFormChange('walletAddress', e.target.value)}
+                        disabled={!editingFields.walletAddress}
+                        style={{
+                          ...styles.input,
+                          flex: 1,
+                          opacity: editingFields.walletAddress ? 1 : 0.7
+                        }}
+                      />
+                      <button
+                        onClick={() => toggleFieldEdit('walletAddress')}
+                        style={{
+                          background: editingFields.walletAddress ? '#10b981' : '#6b7280',
+                          border: 'none',
+                          color: 'white',
+                          padding: '0.5rem',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Username */}
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '0.5rem',
+                      color: 'rgba(255, 255, 255, 0.8)',
+                      fontWeight: '500'
+                    }}>
+                      Username
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.username}
+                      disabled={true}
+                      style={{
+                        ...styles.input,
+                        opacity: 0.7,
+                        cursor: 'not-allowed'
+                      }}
+                    />
+                    <p style={{
+                      fontSize: '0.75rem',
+                      color: 'rgba(255, 255, 255, 0.5)',
+                      marginTop: '0.25rem',
+                      fontStyle: 'italic'
+                    }}>
+                      Username cannot be changed (unique identifier)
+                    </p>
+                  </div>
+
+                  {/* Password */}
+                  {/* <div>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '0.5rem',
+                      color: 'rgba(255, 255, 255, 0.8)',
+                      fontWeight: '500'
+                    }}>
+                      Password
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input
+                        type="password"
+                        value={editForm.password}
+                        onChange={(e) => handleEditFormChange('password', e.target.value)}
+                        disabled={!editingFields.password}
+                        placeholder="Leave empty to keep current password"
+                        style={{
+                          ...styles.input,
+                          flex: 1,
+                          opacity: editingFields.password ? 1 : 0.7
+                        }}
+                      />
+                      <button
+                        onClick={() => toggleFieldEdit('password')}
+                        style={{
+                          background: editingFields.password ? '#10b981' : '#6b7280',
+                          border: 'none',
+                          color: 'white',
+                          padding: '0.5rem',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                    </div>
+                  </div> */}
+
+                  {/* Ambassador Code */}
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '0.5rem',
+                      color: 'rgba(255, 255, 255, 0.8)',
+                      fontWeight: '500'
+                    }}>
+                      Ambassador Code
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={editForm.ambassadorCode}
+                        onChange={(e) => handleEditFormChange('ambassadorCode', e.target.value)}
+                        disabled={!editingFields.ambassadorCode}
+                        style={{
+                          ...styles.input,
+                          flex: 1,
+                          opacity: editingFields.ambassadorCode ? 1 : 0.7
+                        }}
+                      />
+                      <button
+                        onClick={() => toggleFieldEdit('ambassadorCode')}
+                        style={{
+                          background: editingFields.ambassadorCode ? '#10b981' : '#6b7280',
+                          border: 'none',
+                          color: 'white',
+                          padding: '0.5rem',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Commission Rate */}
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '0.5rem',
+                      color: 'rgba(255, 255, 255, 0.8)',
+                      fontWeight: '500'
+                    }}>
+                      Commission Rate (%)
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        value={editForm.commissionRate}
+                        onChange={(e) => handleEditFormChange('commissionRate', e.target.value)}
+                        disabled={!editingFields.commissionRate}
+                        min="0"
+                        max="50"
+                        step="0.1"
+                        style={{
+                          ...styles.input,
+                          flex: 1,
+                          opacity: editingFields.commissionRate ? 1 : 0.7
+                        }}
+                      />
+                      <button
+                        onClick={() => toggleFieldEdit('commissionRate')}
+                        style={{
+                          background: editingFields.commissionRate ? '#10b981' : '#6b7280',
+                          border: 'none',
+                          color: 'white',
+                          padding: '0.5rem',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Payout Wallet Address */}
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '0.5rem',
+                      color: 'rgba(255, 255, 255, 0.8)',
+                      fontWeight: '500'
+                    }}>
+                      Payout Wallet Address
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={editForm.payoutWalletAddress}
+                        onChange={(e) => handleEditFormChange('payoutWalletAddress', e.target.value)}
+                        disabled={!editingFields.payoutWalletAddress}
+                        placeholder="Enter payout wallet address"
+                        style={{
+                          ...styles.input,
+                          flex: 1,
+                          opacity: editingFields.payoutWalletAddress ? 1 : 0.7
+                        }}
+                      />
+                      <button
+                        onClick={() => toggleFieldEdit('payoutWalletAddress')}
+                        style={{
+                          background: editingFields.payoutWalletAddress ? '#10b981' : '#6b7280',
+                          border: 'none',
+                          color: 'white',
+                          padding: '0.5rem',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                    </div>
+                    <p style={{
+                      fontSize: '0.75rem',
+                      color: 'rgba(255, 255, 255, 0.5)',
+                      marginTop: '0.25rem',
+                      fontStyle: 'italic'
+                    }}>
+                      This is where commissions will be paid to the ambassador
+                    </p>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div style={{
+                  display: 'flex',
+                  gap: '1rem',
+                  marginTop: '2rem',
+                  justifyContent: 'flex-end'
+                }}>
+                  <button
+                    onClick={handleCloseEditModal}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      color: 'white',
+                      padding: '0.75rem 1.5rem',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: '500',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = 'rgba(255, 255, 255, 0.2)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                    }}
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={handleSaveChanges}
+                    disabled={editLoading}
+                    style={{
+                      background: editLoading ? 'rgba(168, 85, 247, 0.5)' : 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                      border: 'none',
+                      color: 'white',
+                      padding: '0.75rem 1.5rem',
+                      borderRadius: '12px',
+                      cursor: editLoading ? 'not-allowed' : 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: '500',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    {editLoading && <RefreshCw size={16} className="animate-spin" />}
+                    Save Changes
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Delete Ambassador Confirmation Modal */}
+        <AnimatePresence>
+          {showDeleteModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1000,
+                padding: '1rem'
+              }}
+              onClick={handleCancelDelete}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                style={{
+                  background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+                  borderRadius: '20px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  padding: '2rem',
+                  maxWidth: '500px',
+                  width: '100%',
+                  textAlign: 'center'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{
+                  marginBottom: '1.5rem'
+                }}>
+                  <div style={{
+                    width: '64px',
+                    height: '64px',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 1rem',
+                    border: '2px solid rgba(239, 68, 68, 0.3)'
+                  }}>
+                    <Trash2 size={32} color="#ef4444" />
+                  </div>
+                  <h2 style={{
+                    fontSize: '1.5rem',
+                    fontWeight: 'bold',
+                    color: 'white',
+                    margin: '0 0 0.5rem 0'
+                  }}>
+                    Delete Ambassador
+                  </h2>
+                  <p style={{
+                    fontSize: '1rem',
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    margin: 0,
+                    lineHeight: '1.5'
+                  }}>
+                    Do you want to delete this ambassador <strong style={{ color: '#ef4444' }}>{deletingAmbassador?.ambassadorCode}</strong>?
+                  </p>
+                  <p style={{
+                    fontSize: '0.875rem',
+                    color: 'rgba(255, 255, 255, 0.5)',
+                    margin: '1rem 0 0 0',
+                    fontStyle: 'italic'
+                  }}>
+                    This action cannot be undone. All associated data will be permanently removed.
+                  </p>
+                </div>
+
+                {/* Action Buttons */}
+                <div style={{
+                  display: 'flex',
+                  gap: '1rem',
+                  justifyContent: 'center'
+                }}>
+                  <button
+                    onClick={handleCancelDelete}
+                    disabled={deleteLoading}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      color: 'white',
+                      padding: '0.75rem 1.5rem',
+                      borderRadius: '12px',
+                      cursor: deleteLoading ? 'not-allowed' : 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: '500',
+                      transition: 'all 0.2s ease',
+                      opacity: deleteLoading ? 0.5 : 1
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!deleteLoading) {
+                        e.target.style.background = 'rgba(255, 255, 255, 0.2)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!deleteLoading) {
+                        e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                      }
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmDelete}
+                    disabled={deleteLoading}
+                    style={{
+                      background: deleteLoading ? 'rgba(239, 68, 68, 0.5)' : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                      border: 'none',
+                      color: 'white',
+                      padding: '0.75rem 1.5rem',
+                      borderRadius: '12px',
+                      cursor: deleteLoading ? 'not-allowed' : 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: '500',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    {deleteLoading && <RefreshCw size={16} className="animate-spin" />}
+                    Yes, Delete It
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Player Details Modal */}
+        <AnimatePresence>
+          {showPlayerDetailsModal && selectedPlayer && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1000,
+                padding: '1rem'
+              }}
+              onClick={() => setShowPlayerDetailsModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                style={{
+                  background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+                  borderRadius: '20px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  padding: '2rem',
+                  maxWidth: '600px',
+                  width: '100%',
+                  maxHeight: '80vh',
+                  overflowY: 'auto'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '1.5rem'
+                }}>
+                  <h2 style={{
+                    fontSize: '1.5rem',
+                    fontWeight: 'bold',
+                    color: 'white',
+                    margin: 0
+                  }}>
+                    Player Details
+                  </h2>
+                  <button
+                    onClick={() => setShowPlayerDetailsModal(false)}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      color: 'white',
+                      padding: '0.5rem',
+                      borderRadius: '50%',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* Player Info */}
+                <div style={{ marginBottom: '2rem' }}>
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '12px',
+                    padding: '1.5rem',
+                    marginBottom: '1rem'
+                  }}>
+                    <h3 style={{ color: '#fff', marginBottom: '1rem', fontSize: '1.1rem' }}>Player Information</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div>
+                        <label style={{ color: '#888', fontSize: '0.9rem' }}>Username</label>
+                        <div style={{ color: '#fff', fontWeight: '500' }}>{selectedPlayer.username}</div>
+                      </div>
+                      <div>
+                        <label style={{ color: '#888', fontSize: '0.9rem' }}>Wallet Address</label>
+                        <div style={{ color: '#fff', fontSize: '0.9rem', wordBreak: 'break-all' }}>
+                          {selectedPlayer.walletAddress}
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ color: '#888', fontSize: '0.9rem' }}>Login Type</label>
+                        <div style={{ color: '#fff', fontWeight: '500' }}>{selectedPlayer.loginType}</div>
+                      </div>
+                      <div>
+                        <label style={{ color: '#888', fontSize: '0.9rem' }}>Referred By</label>
+                        <div style={{ color: '#fff', fontWeight: '500' }}>
+                          {selectedPlayer.referredBy || 'N/A'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Betting Statistics */}
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '12px',
+                    padding: '1.5rem'
+                  }}>
+                    <h3 style={{ color: '#fff', marginBottom: '1rem', fontSize: '1.1rem' }}>Betting Statistics</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+                      <div style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        padding: '1rem',
+                        borderRadius: '8px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ color: '#00ff88', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                          {formatNumber(selectedPlayer.totalBets)}
+                        </div>
+                        <div style={{ color: '#888', fontSize: '0.9rem' }}>Total Bets</div>
+                      </div>
+                      <div style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        padding: '1rem',
+                        borderRadius: '8px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ color: '#00ff88', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                          ${formatNumber(selectedPlayer.totalWins)}
+                        </div>
+                        <div style={{ color: '#888', fontSize: '0.9rem' }}>Total Wins</div>
+                      </div>
+                      <div style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        padding: '1rem',
+                        borderRadius: '8px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ color: '#ff4444', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                          ${formatNumber(selectedPlayer.totalLosses)}
+                        </div>
+                        <div style={{ color: '#888', fontSize: '0.9rem' }}>Total Losses</div>
+                      </div>
+                      <div style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        padding: '1rem',
+                        borderRadius: '8px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ 
+                          color: selectedPlayer.netPL >= 0 ? '#00ff88' : '#ff4444', 
+                          fontSize: '1.5rem', 
+                          fontWeight: 'bold' 
+                        }}>
+                          ${formatNumber(selectedPlayer.netPL)}
+                        </div>
+                        <div style={{ color: '#888', fontSize: '0.9rem' }}>Net P/L</div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+                      <div style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        padding: '1rem',
+                        borderRadius: '8px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ color: '#fff', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                          {selectedPlayer?.winRate?.toFixed(1)}%
+                        </div>
+                        <div style={{ color: '#888', fontSize: '0.9rem' }}>Win Rate</div>
+                      </div>
+                      <div style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        padding: '1rem',
+                        borderRadius: '8px',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ color: '#fff', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                          ${formatNumber(selectedPlayer.totalVolume)}
+                        </div>
+                        <div style={{ color: '#888', fontSize: '0.9rem' }}>Total Volume</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
+
+      {/* Password Change Modal */}
+      {showPasswordModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem'
+          }}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            style={{
+              background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%)',
+              borderRadius: '16px',
+              padding: '2rem',
+              width: '100%',
+              maxWidth: '500px',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)'
+            }}
+          >
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '1.5rem'
+            }}>
+              <h3 style={{
+                fontSize: '1.5rem',
+                fontWeight: 'bold',
+                color: 'white',
+                margin: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem'
+              }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Key size={20} color="#3b82f6" />
+                </div>
+                Change Password
+              </h3>
+              <button
+                onClick={closePasswordModal}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '8px',
+                  padding: '0.5rem',
+                  color: '#ef4444',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {selectedUser && (
+              <div style={{
+                background: 'rgba(59, 130, 246, 0.1)',
+                border: '1px solid rgba(59, 130, 246, 0.2)',
+                borderRadius: '8px',
+                padding: '1rem',
+                marginBottom: '1.5rem'
+              }}>
+                <div style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>
+                  User Details:
+                </div>
+                <div style={{ fontSize: '0.875rem', color: 'white', marginBottom: '0.25rem' }}>
+                  <strong>Username:</strong> {selectedUser.userName || 'N/A'}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: 'white', fontFamily: 'monospace' }}>
+                  <strong>Wallet:</strong> {selectedUser.walletAddress ? 
+                    `${selectedUser.walletAddress.substring(0, 8)}...${selectedUser.walletAddress.substring(selectedUser.walletAddress.length - 8)}` 
+                    : 'N/A'
+                  }
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handlePasswordChange}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  color: 'rgba(255, 255, 255, 0.9)',
+                  marginBottom: '0.5rem'
+                }}>
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                  placeholder="Enter new password"
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: 'rgba(30, 41, 59, 0.5)',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '0.875rem',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  color: 'rgba(255, 255, 255, 0.9)',
+                  marginBottom: '0.5rem'
+                }}>
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                  placeholder="Confirm new password"
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: 'rgba(30, 41, 59, 0.5)',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '0.875rem',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {passwordMessage.text && (
+                <div style={{
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  marginBottom: '1rem',
+                  background: passwordMessage.type === 'success' 
+                    ? 'rgba(16, 185, 129, 0.1)' 
+                    : 'rgba(239, 68, 68, 0.1)',
+                  border: `1px solid ${passwordMessage.type === 'success' 
+                    ? 'rgba(16, 185, 129, 0.3)' 
+                    : 'rgba(239, 68, 68, 0.3)'}`,
+                  color: passwordMessage.type === 'success' ? '#10b981' : '#ef4444',
+                  fontSize: '0.875rem'
+                }}>
+                  {passwordMessage.text}
+                </div>
+              )}
+
+              <div style={{
+                display: 'flex',
+                gap: '1rem',
+                justifyContent: 'flex-end'
+              }}>
+                <button
+                  type="button"
+                  onClick={closePasswordModal}
+                  disabled={passwordLoading}
+                  style={{
+                    background: 'rgba(107, 114, 128, 0.1)',
+                    border: '1px solid rgba(107, 114, 128, 0.3)',
+                    borderRadius: '8px',
+                    padding: '0.75rem 1.5rem',
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    cursor: passwordLoading ? 'not-allowed' : 'pointer',
+                    fontSize: '0.875rem',
+                    fontWeight: '600'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={passwordLoading}
+                  style={{
+                    background: passwordLoading 
+                      ? 'rgba(59, 130, 246, 0.5)' 
+                      : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0.75rem 1.5rem',
+                    color: 'white',
+                    cursor: passwordLoading ? 'not-allowed' : 'pointer',
+                    fontSize: '0.875rem',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  {passwordLoading ? (
+                    <>
+                      <div style={{
+                        width: '16px',
+                        height: '16px',
+                        border: '2px solid rgba(255, 255, 255, 0.3)',
+                        borderTop: '2px solid white',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite'
+                      }} />
+                      Changing...
+                    </>
+                  ) : (
+                    <>
+                      <Key size={16} />
+                      Change Password
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* Payment Confirmation Modal */}
+      <PaymentConfirmationModal
+        show={showPaymentConfirmation}
+        onClose={() => {
+          setShowPaymentConfirmation(false);
+          setPaymentRequest(null);
+        }}
+        request={paymentRequest}
+        onConfirm={handleProcessPayment}
+        loading={paymentLoading}
+      />
     </div>
   );
 };
@@ -3104,6 +5891,285 @@ const StatCard = ({ title, value, icon: Icon, color, trend, pulse, data }) => {
       
       {data && <MiniChart data={data} color={color} />}
     </motion.div>
+  );
+};
+
+// Payment Confirmation Modal
+const PaymentConfirmationModal = ({ 
+  show, 
+  onClose, 
+  request, 
+  onConfirm, 
+  loading 
+}) => {
+  if (!show || !request) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(10px)'
+        }}
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.8, opacity: 0 }}
+          style={{
+            background: 'linear-gradient(135deg, rgba(39, 23, 65, 0.95) 0%, rgba(20, 15, 35, 0.95) 100%)',
+            borderRadius: '16px',
+            padding: '1.5rem',
+            maxWidth: '450px',
+            width: '90%',
+            border: '1px solid rgba(16, 185, 129, 0.3)',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
+            position: 'relative'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            style={{
+              position: 'absolute',
+              top: '1rem',
+              right: '1rem',
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255, 255, 255, 0.6)',
+              fontSize: '1.5rem',
+              cursor: 'pointer',
+              padding: '0.5rem'
+            }}
+          >
+            ×
+          </button>
+
+          {/* Header */}
+          <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+            <div style={{
+              width: '50px',
+              height: '50px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%)',
+              border: '2px solid rgba(16, 185, 129, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 0.75rem',
+              fontSize: '1.2rem'
+            }}>
+              💰
+            </div>
+            <h2 style={{
+              color: 'white',
+              fontSize: '1.3rem',
+              fontWeight: 'bold',
+              margin: 0
+            }}>
+              Confirm Payment
+            </h2>
+            <p style={{
+              color: 'rgba(255, 255, 255, 0.7)',
+              fontSize: '0.85rem',
+              margin: '0.25rem 0 0'
+            }}>
+              Review details before proceeding
+            </p>
+          </div>
+
+          {/* Payment Details */}
+          <div style={{
+            background: 'rgba(0, 0, 0, 0.3)',
+            borderRadius: '10px',
+            padding: '1rem',
+            marginBottom: '1.5rem'
+          }}>
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: '1fr 1fr', 
+              gap: '1rem',
+              marginBottom: '0.75rem'
+            }}>
+              <div>
+                <label style={{
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  fontSize: '0.7rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Ambassador
+                </label>
+                <div style={{
+                  color: 'white',
+                  fontSize: '1rem',
+                  fontWeight: 'bold'
+                }}>
+                  {request.ambassadorUsername}
+                </div>
+              </div>
+
+              <div>
+                <label style={{
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  fontSize: '0.7rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Amount
+                </label>
+                <div style={{
+                  color: '#10b981',
+                  fontSize: '1.1rem',
+                  fontWeight: 'bold'
+                }}>
+                  {request?.amount?.toFixed(2)} sol
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{
+                color: 'rgba(255, 255, 255, 0.6)',
+                fontSize: '0.7rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                Payout Wallet
+              </label>
+              <div style={{
+                color: 'white',
+                fontSize: '0.8rem',
+                fontFamily: 'monospace',
+                background: 'rgba(0, 0, 0, 0.2)',
+                padding: '0.4rem',
+                borderRadius: '4px',
+                wordBreak: 'break-all'
+              }}>
+                {request.payoutWalletAddress}
+              </div>
+            </div>
+
+            <div>
+              <label style={{
+                color: 'rgba(255, 255, 255, 0.6)',
+                fontSize: '0.7rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                Commission Rate
+              </label>
+              <div style={{
+                color: 'white',
+                fontSize: '0.9rem'
+              }}>
+                {request.commissionRate}%
+              </div>
+            </div>
+          </div>
+
+          {/* Warning */}
+          <div style={{
+            background: 'rgba(255, 193, 7, 0.1)',
+            border: '1px solid rgba(255, 193, 7, 0.3)',
+            borderRadius: '6px',
+            padding: '0.75rem',
+            marginBottom: '1.5rem'
+          }}>
+            <div style={{
+              color: '#ffc107',
+              fontSize: '0.8rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem'
+            }}>
+              ⚠️ This will send real funds and cannot be undone.
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{
+            display: 'flex',
+            gap: '0.75rem',
+            justifyContent: 'center'
+          }}>
+            <motion.button
+              onClick={onClose}
+              disabled={loading}
+              style={{
+                background: 'rgba(108, 117, 125, 0.2)',
+                border: '1px solid rgba(108, 117, 125, 0.3)',
+                color: 'rgba(255, 255, 255, 0.8)',
+                padding: '0.6rem 1.5rem',
+                borderRadius: '6px',
+                fontSize: '0.9rem',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.6 : 1
+              }}
+              whileHover={!loading ? { scale: 1.05 } : {}}
+              whileTap={!loading ? { scale: 0.95 } : {}}
+            >
+              Cancel
+            </motion.button>
+
+            <motion.button
+              onClick={onConfirm}
+              disabled={loading}
+              style={{
+                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                color: '#10b981',
+                padding: '0.6rem 1.5rem',
+                borderRadius: '6px',
+                fontSize: '0.9rem',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.6 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem'
+              }}
+              whileHover={!loading ? { 
+                scale: 1.05,
+                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(16, 185, 129, 0.2) 100%)'
+              } : {}}
+              whileTap={!loading ? { scale: 0.95 } : {}}
+            >
+              {loading ? (
+                <>
+                  <div style={{
+                    width: '14px',
+                    height: '14px',
+                    border: '2px solid rgba(16, 185, 129, 0.3)',
+                    borderTop: '2px solid #10b981',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                  }} />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  💰 Confirm
+                </>
+              )}
+            </motion.button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 

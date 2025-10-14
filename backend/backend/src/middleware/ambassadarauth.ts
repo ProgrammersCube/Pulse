@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import Admin from '../models/admin.model';
+import Ambassador from '../models/ambassador.model';
 
-export interface AdminRequest extends Request {
-  admin?: any;
+export interface AmbassadorRequest extends Request {
+  ambassador?: any;
 }
 
-export const adminAuth = async (
-  req: AdminRequest,
+export const ambassadorAuth = async (
+  req: AmbassadorRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
@@ -23,14 +23,14 @@ export const adminAuth = async (
       return;
     }
     const decoded = jwt.verify(token, process.env.JWT_SECRET ) as any;
-    const admin = await Admin.findById(decoded.id).select('-password');
+    const ambassador = await Ambassador.findById(decoded.id);
     
-    if (!admin || !admin.isActive) {
+    if (!ambassador || !ambassador.isActive) {
       res.status(401).json({ success: false, message: 'Unauthorized' });
       return;
     }
     
-    req.admin = admin;
+    req.ambassador = ambassador;
     next();
   } catch (error) {
     res.status(401).json({ success: false, message: 'Invalid token' });

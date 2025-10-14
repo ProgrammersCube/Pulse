@@ -7,6 +7,7 @@ import { getMatchmakingService } from './matchmaking.service';
 import { getBlockchainService } from './blockchain.service';
 import { io } from '../index';
 import Settings from '../models/settings.model';
+import { getActiveWalletKeys } from '../controllers/admin.controller';
 
 interface CreateBetRequest {
   userId: string;
@@ -26,7 +27,6 @@ interface GameResult {
 }
 
 class GameService extends EventEmitter {
-  private readonly FEE_PERCENTAGE = 0.05; // 5% fee
   // private activeGames: Map<string, NodeJS.Timeout> = new Map();
   private completionLocks: Map<string, boolean> = new Map(); // Add this line
 
@@ -36,6 +36,29 @@ class GameService extends EventEmitter {
     ETH: 0.001,
     RADBRO: 100
   };
+
+  // Helper method to get current house wallet address
+  private async getHouseWalletAddress(): Promise<string> {
+    const walletKeys = await getActiveWalletKeys();
+    return walletKeys.publicKey;
+  }
+
+  // Helper method to get house fee percentage from settings
+  private async getHouseFeePercentage(): Promise<number> {
+    try {
+      const settings = await Settings.findOne();
+      if (settings && settings.houseFeePercentage !== undefined) {
+        // Convert percentage to decimal (e.g., 5% -> 0.05)
+        return settings.houseFeePercentage / 100;
+      }
+    } catch (error) {
+      console.error('Error fetching house fee percentage from settings:', error);
+    }
+    
+    // Fallback to default 5% fee if settings not found or error occurs
+    console.log('Using fallback house fee percentage: 5%');
+    return 0.05;
+  }
   
   private readonly MAX_BET_AMOUNTS: Record<string, number> = {
     BeTyche: 1000000,
@@ -90,28 +113,27 @@ async createBet(request: CreateBetRequest): Promise<IBet> {
 
   console.log(`🔍 Verifying transaction: ${transactionSignature}`);
   
-  try {
-    const isValid = await this.blockchainService.verifyTransaction(transactionSignature);
-    
-    if (!isValid) {
-      throw new Error('Invalid transaction signature');
-    }
-    
-    console.log('✅ Transaction verified - tokens received by house');
-  } catch (verifyError) {
-    console.error('❌ Transaction verification error:', verifyError);
-    // For testing, you might want to skip verification temporarily
-    console.log('⚠️ WARNING: Skipping transaction verification for testing');
+  // Strict transaction verification with all security checks
+  const verificationResult = await this.blockchainService.verifyTransaction(
+    transactionSignature,
+    userId, // expected sender
+    amount, // expected amount
+    token   // expected token
+  );
+  
+  if (!verificationResult.valid) {
+    throw new Error(verificationResult.error || 'Transaction verification failed');
   }
+  
+  console.log('✅ Transaction verified - all security checks passed');
   
   // CHECK ALL HOUSE BALANCES FIRST
-  const houseWalletAddress = process.env.HOUSE_WALLET_ADDRESS;
-  if (!houseWalletAddress) {
-    throw new Error('Service configuration error. Please contact support.');
-  }
+  const houseWalletAddress = await this.getHouseWalletAddress();
   
   // Check ALL token balances
-  const tokens = ['BeTyche', 'SOL', 'RADBRO'];
+  // TODO: Remove this after testing
+  const tokens = ['SOL'];
+  // const tokens = ['BeTyche', 'SOL', 'RADBRO'];
   const insufficientTokens: string[] = [];
   let balanceReport = '📊 HOUSE BALANCE REPORT:\n\n';
   
@@ -129,7 +151,7 @@ async createBet(request: CreateBetRequest): Promise<IBet> {
   // If ANY token has insufficient balance, block ALL betting
   if (insufficientTokens.length > 0) {
     console.log(`❌ House has insufficient balance for tokens: ${insufficientTokens.join(', ')}`);
-    throw new Error(`🚫 INSUFFICIENT HOUSE BALANCE\n\n${balanceReport}\n❌ Insufficient tokens: ${insufficientTokens.join(', ')}\n\nThe house needs to maintain minimum balance for ALL tokens to ensure fair gameplay.\n\nBetting is temporarily disabled. Please contact admin or try again later.`);
+    throw new Error(`INSUFFICIENT HOUSE BALANCE\n\n${balanceReport}\nInsufficient tokens: ${insufficientTokens.join(', ')}\n\nThe house needs to maintain minimum balance for ALL tokens to ensure fair gameplay.\n\nBetting is temporarily disabled. Please contact admin or try again later.`);
   }
   
   // Now check for the SPECIFIC bet amount
@@ -138,7 +160,7 @@ async createBet(request: CreateBetRequest): Promise<IBet> {
   
   if (houseBalance < requiredAmount) {
     console.log(`❌ House insufficient ${token} for this bet: ${houseBalance} < ${requiredAmount}`);
-    throw new Error(`🚫 INSUFFICIENT HOUSE BALANCE FOR THIS BET\n\n${balanceReport}\n\nYour bet requires: ${requiredAmount.toFixed(4)} ${token}\nHouse has: ${houseBalance.toFixed(4)} ${token}\n\nPlease try a smaller amount.`);
+    throw new Error(`INSUFFICIENT HOUSE BALANCE FOR THIS BET\n\n${balanceReport}\n\nYour bet requires: ${requiredAmount.toFixed(4)} ${token}\nHouse has: ${houseBalance.toFixed(4)} ${token}\n\nPlease try a smaller amount.`);
   }
   
   console.log(`✅ All house balances OK for betting`);
@@ -152,8 +174,8 @@ async createBet(request: CreateBetRequest): Promise<IBet> {
   // Generate bet ID
   const betId = this.generateBetId();
   
-  console.log(`💸 Transaction already completed: ${amount} ${token} from ${userId} to house`);
-  console.log(`📝 Transaction signature: ${transactionSignature}`);
+  console.log(`Transaction already completed: ${amount} ${token} from ${userId} to house`);
+  console.log(`Transaction signature: ${transactionSignature}`);
   
   // Lock the current price
   const priceManager = getPythPriceManager();
@@ -182,10 +204,13 @@ async createBet(request: CreateBetRequest): Promise<IBet> {
   
   await bet.save();
   
+  // Link transaction signature to betId for audit trail
+  await blockchainService.updateTransactionBetId(transactionSignature, betId);
+  
   // Update database balance to reflect blockchain transfer
   await this.syncDatabaseBalance(userId, token);
   
-  console.log(`🎲 Bet created with REAL blockchain transfer: ${betId}`);
+  console.log(`Bet created with REAL blockchain transfer: ${betId}`);
   
   // Emit bet created event
   io.to(`user:${userId}`).emit('bet:created', {
@@ -212,7 +237,7 @@ async completeGame(betId: string): Promise<GameResult> {
   }
   
   if (this.completionLocks.has(lockKey)) {
-    console.log('⚠️ Game completion already in progress for:', betId);
+            console.log('Game completion already in progress for:', betId);
     return {} as GameResult; // Return empty result instead of throwing
   }
   this.completionLocks.set(lockKey, true);
@@ -227,7 +252,7 @@ async completeGame(betId: string): Promise<GameResult> {
     // Check if bet is not in progress
     if (bet.status !== BetStatus.IN_PROGRESS) {
       if (bet.status === BetStatus.COMPLETED) {
-        console.log('⚠️ Bet already completed:', betId);
+        console.log('Bet already completed:', betId);
         
         // Return the existing completed game result
         return {
@@ -245,7 +270,7 @@ async completeGame(betId: string): Promise<GameResult> {
     
     // TRIPLE CHECK: Ensure no payout has been processed
     if (bet.metadata?.payoutTransferSignature) {
-      console.log('⚠️ Payout already processed for bet:', betId);
+              console.log('Payout already processed for bet:', betId);
       
       // Return the existing result
       return {
@@ -292,15 +317,16 @@ async completeGame(betId: string): Promise<GameResult> {
     let houseHasInsufficientBalance = false;
     if (result !== BetResult.LOSS) { // Only check if user might win or draw
       try {
+        const houseWalletAddress = await this.getHouseWalletAddress();
         const houseBalance = await this.blockchainService.getRealBalance(
-          process.env.HOUSE_WALLET_ADDRESS!,
+          houseWalletAddress,
           bet.token
         );
         
         const requiredAmount = result === BetResult.WIN ? bet.amount * 2 * 0.95 : bet.amount;
         if (houseBalance < requiredAmount) {
           houseHasInsufficientBalance = true;
-          console.log(`⚠️ House has insufficient balance: ${houseBalance} < ${requiredAmount}`);
+          console.log(`House has insufficient balance: ${houseBalance} < ${requiredAmount}`);
         }
       } catch (error) {
         console.error('Error checking house balance:', error);
@@ -316,20 +342,21 @@ async completeGame(betId: string): Promise<GameResult> {
     let transferSignature = '';
     
     if (result === BetResult.WIN) {
-      // Winner gets their bet + opponent's bet - 5% fee
+      // Winner gets their bet + opponent's bet - dynamic fee
       const totalPot = bet.amount * 2;
-      fee = parseFloat((totalPot * this.FEE_PERCENTAGE).toFixed(8)); // Ensure precision
+      const feePercentage = await this.getHouseFeePercentage();
+      fee = parseFloat((totalPot * feePercentage).toFixed(8)); // Ensure precision
       winAmount = parseFloat((totalPot - fee).toFixed(8)); // Ensure precision
       bet.payout = winAmount;
       bet.fee = fee;
       
-      console.log(`💰 Exact payout calculation:
-        - Bet amount: ${bet.amount}
-        - Total pot: ${totalPot}
-        - Fee (5%): ${fee}
-        - Win amount: ${winAmount}
-        - Token: ${bet.token}
-      `);
+              console.log(`Exact payout calculation:
+          - Bet amount: ${bet.amount}
+          - Total pot: ${totalPot}
+          - Fee (${(feePercentage * 100).toFixed(1)}%): ${fee}
+          - Win amount: ${winAmount}
+          - Token: ${bet.token}
+        `);
       
       // EXECUTE REAL BLOCKCHAIN TRANSFER FROM HOUSE TO USER
       try {
@@ -341,8 +368,8 @@ async completeGame(betId: string): Promise<GameResult> {
         
         if (transferResult.success) {
           transferSignature = transferResult.signature || '';
-          console.log(`🎉 REAL WIN PAYOUT: ${winAmount} ${bet.token} transferred to ${bet.userId}`);
-          console.log(`📝 Payout signature: ${transferSignature}`);
+          console.log(`REAL WIN PAYOUT: ${winAmount} ${bet.token} transferred to ${bet.userId}`);
+                      console.log(`Payout signature: ${transferSignature}`);
         } else {
           console.error(`❌ Failed to transfer winnings: ${transferResult.error}`);
           // Still record the win, but flag the transfer issue
@@ -378,7 +405,7 @@ async completeGame(betId: string): Promise<GameResult> {
         if (transferResult.success) {
           transferSignature = transferResult.signature || '';
           console.log(`🤝 REAL DRAW REFUND: ${bet.amount} ${bet.token} refunded to ${bet.userId}`);
-          console.log(`📝 Refund signature: ${transferSignature}`);
+          console.log(`Refund signature: ${transferSignature}`);
         } else {
           console.error(`❌ Failed to refund draw: ${transferResult.error}`);
           bet.metadata = { 
@@ -514,7 +541,7 @@ async completeGame(betId: string): Promise<GameResult> {
       
       if (transferResult.success) {
         opponentTransferSignature = transferResult.signature || '';
-        console.log(`🎉 OPPONENT WIN: ${winAmount} ${opponentBet.token} transferred to ${opponentBet.userId}`);
+        console.log(`OPPONENT WIN: ${winAmount} ${opponentBet.token} transferred to ${opponentBet.userId}`);
       }
       
     } else {
@@ -587,7 +614,7 @@ async completeGame(betId: string): Promise<GameResult> {
     if (transferResult.success) {
       transferSignature = transferResult.signature || '';
       console.log(`❌ REAL REFUND: ${bet.amount} ${bet.token} refunded to ${bet.userId} for cancelled bet`);
-      console.log(`📝 Refund signature: ${transferSignature}`);
+              console.log(`Refund signature: ${transferSignature}`);
     } else {
       console.error(`❌ Failed to refund cancelled bet: ${transferResult.error}`);
       bet.metadata = { 
@@ -773,10 +800,13 @@ private sendCountdownUpdates(betId: string, duration: number) {
   
   // Additional methods for blockchain integration
   async getHouseBalance(token: string): Promise<number> {
-    const houseWalletAddress = process.env.HOUSE_WALLET_ADDRESS;
-    if (!houseWalletAddress) return 0;
-    
-    return await this.blockchainService.getRealBalance(houseWalletAddress, token);
+    try {
+      const houseWalletAddress = await this.getHouseWalletAddress();
+      return await this.blockchainService.getRealBalance(houseWalletAddress, token);
+    } catch (error) {
+      console.error('Failed to get house wallet address:', error);
+      return 0;
+    }
   }
   
   async syncAllUserBalances(): Promise<void> {

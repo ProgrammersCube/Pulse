@@ -46,6 +46,7 @@ export interface ISettings extends Document {
     amount: number;
     frequency: 'daily' | 'weekly' | 'monthly' | 'once';
   };
+  walletRotationFallbackEnabled:boolean;
   // New Wallet Rotation
   walletRotation: IWalletRotation[];
   updatedAt: Date;
@@ -117,7 +118,7 @@ const settingsSchema = new Schema<ISettings>({
     type: Number,
     default: 5,
     min: 0,
-    max: 20
+    max: 50
   },
   
   giveaway: {
@@ -129,6 +130,10 @@ const settingsSchema = new Schema<ISettings>({
       enum: ['daily', 'weekly', 'monthly', 'once'],
       default: 'daily'
     }
+  },
+  walletRotationFallbackEnabled:{
+    type:Boolean,
+    default:false
   },
   walletRotation: { type: [walletRotationSchema], default: [] },
   updatedBy: String

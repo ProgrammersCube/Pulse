@@ -7,7 +7,8 @@
     "start": "npm run build && node dist/index.js",
     "dev": "nodemon src/index.ts",
     "build": "tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "migrate:passwords": "ts-node src/scripts/migratePasswords.ts"
   },
   "keywords": [
     "crypto",
@@ -20,10 +21,13 @@
   "license": "ISC",
   "dependencies": {
     "@pythnetwork/hermes-client": "^2.0.0",
+    "@sendgrid/mail": "^8.1.5",
     "@solana/spl-token": "^0.4.13",
     "@solana/web3.js": "^1.98.2",
     "axios": "^1.9.0",
+    "b58": "^4.0.3",
     "bcryptjs": "^3.0.2",
+    "bs58": "^6.0.0",
     "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
     "dotenv": "^16.5.0",

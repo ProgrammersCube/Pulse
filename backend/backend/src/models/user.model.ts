@@ -1,5 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
-
+import bcrypt from 'bcryptjs';
 // Token balance interface
 interface ITokens {
   BeTyche: number;
@@ -27,6 +27,7 @@ export interface IUser extends Document {
   isAmbassador: boolean;
   userName:string;
   password:string;
+  resetotpCode:string;
   wallets:string[];
 }
 
@@ -46,12 +47,12 @@ const userSchema = new Schema<IUser>(
       unique: true,
       trim: true
     },
-     wallets: [{
-    type: String,
-    unique: true,
-    sparse: true,
-    trim: true
-  }],
+     wallets: {
+    type: [String],
+    default: [],
+    trim: true,
+    sparse: true  // This allows multiple undefined values
+  },
     tokens: {
       BeTyche: {
         type: Number,
@@ -99,6 +100,9 @@ const userSchema = new Schema<IUser>(
       default: null,
       index: true
     },
+    resetotpCode:{
+    type:String
+  },
     lastActive: {
       type: Date,
       default: Date.now
@@ -107,7 +111,8 @@ const userSchema = new Schema<IUser>(
   {
     timestamps: true,
     versionKey: false
-  }
+  },
+  
 );
 
 // Indexes for performance
@@ -140,7 +145,20 @@ userSchema.methods.toJSON = function() {
   delete obj.__v;
   return obj;
 };
-
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error: any) {
+    next(error);
+  }
+});
+userSchema.methods.comparePassword = async function(candidatePassword: string): Promise<boolean> {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
 // Export the model
 const User =
   mongoose.models.User || mongoose.model<IUser>('User', userSchema);

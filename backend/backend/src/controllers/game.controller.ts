@@ -4,6 +4,13 @@ import { getMatchmakingService } from '../services/matchmaking.service';
 import Bet, { BetDirection, BetStatus } from '../models/bet.model';
 import { getBlockchainService } from '../services/blockchain.service';
 import Settings from '../models/settings.model';
+import { getActiveWalletKeys } from './admin.controller';
+
+// Helper function to get current house wallet address
+const getHouseWalletAddress = async (): Promise<string> => {
+  const walletKeys = await getActiveWalletKeys();
+  return walletKeys.publicKey;
+};
 
 // Create a new bet
 export const createBet = async (req: Request, res: Response): Promise<void> => {
@@ -71,18 +78,11 @@ export const createBet = async (req: Request, res: Response): Promise<void> => {
 export const checkSystemStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const blockchainService = getBlockchainService();
-    const houseWalletAddress = process.env.HOUSE_WALLET_ADDRESS;
-    
-    if (!houseWalletAddress) {
-      res.status(500).json({
-        success: false,
-        message: 'Service configuration error'
-      });
-      return;
-    }
+    const houseWalletAddress = await getHouseWalletAddress();
     
     // Check house balances
-    const tokens = ['BeTyche', 'SOL', 'RADBRO'];
+    // const tokens = ['BeTyche', 'SOL', 'RADBRO'];
+    const tokens = ['SOL'];
     const balances: any = {};
     let canBet = true;
     
@@ -102,6 +102,7 @@ export const checkSystemStatus = async (req: Request, res: Response): Promise<vo
       balances
     });
   } catch (error) {
+    console.error('Error checking system status:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to check system status'
@@ -390,17 +391,16 @@ export const validateBet = async (req: Request, res: Response): Promise<void> =>
     
     // Check house balance
     const blockchainService = getBlockchainService();
-    const houseWalletAddress = process.env.HOUSE_WALLET_ADDRESS;
+    const houseWalletAddress = await getHouseWalletAddress();
     
-    if (!houseWalletAddress) {
-      res.status(500).json({
-        success: false,
-        message: 'Service configuration error'
-      });
-      return;
-    }
+    console.log('🏦 HOUSE WALLET CHECK:', {
+      address: houseWalletAddress,
+      token: token
+    });
     
     const houseBalance = await blockchainService.getRealBalance(houseWalletAddress, token);
+    console.log("houseBalance")
+    console.log(houseBalance)
     const requiredAmount = amount * 2; // House needs 2x the bet amount
     
     if (houseBalance < requiredAmount) {

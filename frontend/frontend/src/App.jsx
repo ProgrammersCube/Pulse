@@ -7,7 +7,9 @@ import io from 'socket.io-client';
 import { debounce } from 'lodash';
 import { createTransferToHouseTransaction } from './components/Solana';
 import AdminDashboard from './components/AdminDashboard';
+import AccountOverview from './components/AccountOverview';
 import ReferallDashboard from './components/ReferallDashboard.jsx';
+import PulseDashboard from './components/PulseDashboard.jsx';
 import gameService from './services/game.service.ts';
 import '@solana/wallet-adapter-react-ui/styles.css';
 import { useAppKitProvider, useAppKitAccount } from '@reown/appkit/react';
@@ -15,6 +17,8 @@ import { SOUNDS } from './utils/sound.js';
 import walletService from './services/wallet.service.ts';
 import Ambassador from './components/Ambassadar.jsx';
 import PulseAccount from './components/Pulse.jsx';
+import TermsOfServiceModal from './components/TermsOfServiceModal';
+import { TOSProvider } from './context/TOSContext';
 // Toast component
 const Toast = ({ message, type, onClose }) => (
   <>
@@ -48,7 +52,7 @@ const Toast = ({ message, type, onClose }) => (
       cursor: 'pointer',
       animation: 'fadeIn 0.3s',
     }} onClick={onClose}>
-      {type === 'error' ? '⚠️' : '✅'} {message}
+      {type === 'error' ? '!' : '✓'} {message}
     </div>
   </>
 );
@@ -166,6 +170,9 @@ const AppContextProvider = ({ children }) => {
   // Add state for house fee percentage
   const [houseFee, setHouseFee] = useState(5); // Default to 5, will be updated from backend
 
+  // House wallet check state
+  const [isHouseWallet, setIsHouseWallet] = useState(false);
+  
   // Function to refresh user data
   const refreshUserData = useCallback(async () => {
     if (!isConnected || !address) return; // Changed from connected, publicKey
@@ -417,7 +424,7 @@ const PriceLockDemo = () => {
   if (!isConnected) {
     return (
       <div className="neon-card" style={{ textAlign: 'center', padding: '30px' }}>
-        <h3 className="neon-text">🔒 PRICE LOCK DEMO</h3>
+                  <h3 className="neon-text">PRICE LOCK DEMO</h3>
         <p style={{ marginBottom: '20px', opacity: 0.8 }}>
           Connect your wallet to test the price locking mechanism
         </p>
@@ -651,6 +658,7 @@ const Header = () => {
 
   const { user, btcPrice, refreshUserData } = useAppContext();
   const [tokensVisible, setTokensVisible] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const lastPriceRef = useRef(btcPrice?.price);
   
   // Force refresh user data when token dropdown opens
@@ -662,436 +670,892 @@ const Header = () => {
   
   return (
     <header className="header">
-      <div className="logo-container">
-        <Link to="/">
-          <motion.h1 
-            className="neon-text pulse-animation" 
-            style={{ 
-              fontSize: '2.2rem',
-              margin: 0,
-              letterSpacing: '3px'
-            }}
-            whileHover={{ scale: 1.05 }}
-          >
-            PULSE
-          </motion.h1>
-        </Link>
-      </div>
-      
-      <motion.div 
-        className="btc-price-container" 
-        style={{
-          background: 'rgba(0,0,0,0.4)',
-          borderRadius: '10px',
-          padding: '8px 15px',
-          boxShadow: '0 0 15px rgba(0, 0, 0, 0.6), inset 0 0 10px rgba(255, 62, 62, 0.1)',
-          border: '1px solid rgba(255, 62, 62, 0.3)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          minWidth: '140px'
-        }}
-        animate={{ 
-          boxShadow: btcPrice 
-            ? `0 0 15px rgba(255, 62, 62, ${0.3 + Math.sin(Date.now() / 2000) * 0.1})` 
-            : '0 0 15px rgba(0, 0, 0, 0.6)'
-        }}
-      >
-        {btcPrice ? (
-          <>
-            <div style={{ fontSize: '0.8rem', marginBottom: '2px', opacity: 0.8 }}>BTC/USD</div>
-            <motion.div 
-              className="price-text btc-price" 
-              style={{ 
-                fontSize: '1.2rem', 
-                fontWeight: 'bold',
-                textAlign: 'center',
-                color: btcPrice.price > (lastPriceRef.current || 0) ? '#00ff00' : 
-                       btcPrice.price < (lastPriceRef.current || 0) ? '#ff0000' : 'inherit'
-              }}
-              key={btcPrice.timestamp}
-              animate={{ scale: [1, 1.02, 1] }}
-              transition={{ duration: 0.2 }}
-              onAnimationComplete={() => {
+      {/* Mobile Layout */}
+      <div className="header-mobile">
+        <div className="header-mobile-top">
+          <div className="logo-container">
+            <Link to="/">
+              <motion.h1 
+                className="neon-text pulse-animation" 
+                style={{ 
+                  fontSize: '1.8rem',
+                  margin: 0,
+                  letterSpacing: '2px'
+                }}
+                whileHover={{ scale: 1.05 }}
+              >
+                PULSE
+              </motion.h1>
+            </Link>
+          </div>
 
-                lastPriceRef.current = btcPrice.price;
+          <div className="header-mobile-right">
+            <motion.div 
+              className="btc-price-container btc-price-mobile" 
+              style={{
+                background: 'rgba(0,0,0,0.4)',
+                borderRadius: '8px',
+                padding: '4px 8px',
+                boxShadow: '0 0 10px rgba(0, 0, 0, 0.6), inset 0 0 8px rgba(255, 62, 62, 0.1)',
+                border: '1px solid rgba(255, 62, 62, 0.3)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                minWidth: '80px'
+              }}
+              animate={{ 
+                boxShadow: btcPrice 
+                  ? `0 0 10px rgba(255, 62, 62, ${0.3 + Math.sin(Date.now() / 2000) * 0.1})` 
+                  : '0 0 10px rgba(0, 0, 0, 0.6)'
               }}
             >
-              ${btcPrice.price.toLocaleString(undefined, { 
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-              })}
+              {btcPrice ? (
+                <>
+                  <div style={{ fontSize: '0.6rem', marginBottom: '1px', opacity: 0.8 }}>BTC</div>
+                  <motion.div 
+                    className="price-text btc-price" 
+                    style={{ 
+                      fontSize: '0.8rem', 
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                      color: btcPrice.price > (lastPriceRef.current || 0) ? '#00ff00' : 
+                             btcPrice.price < (lastPriceRef.current || 0) ? '#ff0000' : 'inherit'
+                    }}
+                    key={btcPrice.timestamp}
+                    animate={{ scale: [1, 1.02, 1] }}
+                    transition={{ duration: 0.2 }}
+                    onAnimationComplete={() => {
+                      lastPriceRef.current = btcPrice.price;
+                    }}
+                  >
+                    ${btcPrice.price.toLocaleString(undefined, { 
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 0
+                    })}
+                  </motion.div>
+                </>
+              ) : (
+                <div style={{ fontSize: '0.7rem' }}>Loading...</div>
+              )}
             </motion.div>
-            <div style={{ fontSize: '0.6rem', opacity: 0.6 }}>LIVE</div>
-          </>
-        ) : (
-          <div className="loading-price">Loading...</div>
-        )}
-      </motion.div>
-      
-     <div className="wallet-container">
-  {/* Always visible Admin and Ambassador buttons */}
-  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-    {/* Admin Button */}
-    <Link to="/admin" className="admin-link">
-      <motion.div 
-        className="admin-button" 
-        style={{
-          background: 'rgba(0,0,0,0.4)',
-          borderRadius: '20px',
-          padding: '6px 12px',
-          border: '1px solid var(--neon-red)',
-          boxShadow: '0 0 10px rgba(255, 62, 62, 0.3), inset 0 0 8px rgba(255, 62, 62, 0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          transition: 'all 0.3s ease',
-          cursor: 'pointer'
-        }}
-        whileHover={{ scale: 1.02 }}
-      >
-        <span style={{ 
-          width: '24px', 
-          height: '24px', 
-          borderRadius: '50%', 
-          backgroundColor: 'rgba(255, 62, 62, 0.15)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-red)' }}>
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M12 1v6m0 6v6"/>
-            <path d="M21 12h-6m-6 0H3"/>
-          </svg>
-        </span>
-        <span className="admin-text" style={{
-          fontSize: '0.9rem',
-          color: 'var(--neon-red)',
-          textShadow: '0 0 3px rgba(255, 62, 62, 0.5)',
-          fontWeight: 'bold'
-        }}>
-          ADMIN
-        </span>
-      </motion.div>
-    </Link>
 
-    {/* Ambassador Button */}
-    <Link to="/ambassador" className="admin-link">
-      <motion.div 
-        className="admin-button" 
-        style={{
-          background: 'rgba(0,0,0,0.4)',
-          borderRadius: '20px',
-          padding: '6px 12px',
-          border: '1px solid var(--neon-red)',
-          boxShadow: '0 0 10px rgba(255, 62, 62, 0.3), inset 0 0 8px rgba(255, 62, 62, 0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          transition: 'all 0.3s ease',
-          cursor: 'pointer'
-        }}
-        whileHover={{ scale: 1.02 }}
-      >
-        <span style={{ 
-          width: '24px', 
-          height: '24px', 
-          borderRadius: '50%', 
-          backgroundColor: 'rgba(255, 62, 62, 0.15)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-red)' }}>
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M12 1v6m0 6v6"/>
-            <path d="M21 12h-6m-6 0H3"/>
-          </svg>
-        </span>
-        <span className="admin-text" style={{
-          fontSize: '0.9rem',
-          color: 'var(--neon-red)',
-          textShadow: '0 0 3px rgba(255, 62, 62, 0.5)',
-          fontWeight: 'bold'
-        }}>
-          AMBASSADOR
-        </span>
-      </motion.div>
-    </Link>
-     {/* Ambassador Button */}
-    <Link to="/pulse-auth" className="admin-link">
-      <motion.div 
-        className="admin-button" 
-        style={{
-          background: 'rgba(0,0,0,0.4)',
-          borderRadius: '20px',
-          padding: '6px 12px',
-          border: '1px solid var(--neon-red)',
-          boxShadow: '0 0 10px rgba(255, 62, 62, 0.3), inset 0 0 8px rgba(255, 62, 62, 0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          transition: 'all 0.3s ease',
-          cursor: 'pointer'
-        }}
-        whileHover={{ scale: 1.02 }}
-      >
-        <span style={{ 
-          width: '24px', 
-          height: '24px', 
-          borderRadius: '50%', 
-          backgroundColor: 'rgba(255, 62, 62, 0.15)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-red)' }}>
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M12 1v6m0 6v6"/>
-            <path d="M21 12h-6m-6 0H3"/>
-          </svg>
-        </span>
-        <span className="admin-text" style={{
-          fontSize: '0.9rem',
-          color: 'var(--neon-red)',
-          textShadow: '0 0 3px rgba(255, 62, 62, 0.5)',
-          fontWeight: 'bold'
-        }}>
-          PULSE ACCOUNT
-        </span>
-      </motion.div>
-    </Link>
-  </div>
-
-  {/* Conditionally rendered wallet section */}
-  {isConnected && address ? (
-    <div className="connected-wallet">
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center',
-        gap: '10px' 
-      }}>
-        <Link to="/wallet" className="wallet-link">
-          <motion.div 
-            className="wallet-display" 
-            style={{
-              background: 'rgba(0,0,0,0.4)',
-              borderRadius: '20px',
-              padding: '6px 12px',
-              border: '1px solid var(--neon-blue)',
-              boxShadow: '0 0 10px rgba(0, 242, 255, 0.3), inset 0 0 8px rgba(0, 242, 255, 0.1)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              transition: 'all 0.3s ease'
-            }}
-            whileHover={{ scale: 1.02 }}
-          >
-            <span style={{ 
-              width: '24px', 
-              height: '24px', 
-              borderRadius: '50%', 
-              backgroundColor: 'rgba(0, 242, 255, 0.15)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-blue)' }}>
-                <rect x="2" y="6" width="20" height="12" rx="2" />
-                <path d="M12 12h.01" />
-              </svg>
-            </span>
-            <span className="wallet-address" style={{
-              fontSize: '0.9rem',
-              color: 'var(--neon-blue)',
-              textShadow: '0 0 3px rgba(0, 242, 255, 0.5)'
-            }}>
-              {address.slice(0, 4)}...{address.slice(-4)}
-            </span>
-          </motion.div>
-        </Link>
-        
-        {/* Token Balance Button */}
-        <div style={{ position: 'relative' }}>
-          <motion.button 
-            className="token-toggle-button" 
-            onClick={() => setTokensVisible(!tokensVisible)}
-            style={{
-              backgroundColor: 'rgba(0,0,0,0.4)',
-              border: '1px solid var(--neon-cyan)',
-              borderRadius: '50%',
-              width: '32px',
-              height: '32px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: '0 0 10px rgba(0, 255, 187, 0.3), inset 0 0 8px rgba(0, 255, 187, 0.1)',
-              position: 'relative'
-            }}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-cyan)' }}>
-              <circle cx="12" cy="12" r="8" />
-              <line x1="12" y1="16" x2="12" y2="16" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-            </svg>
-            <div style={{
-              position: 'absolute',
-              top: '-5px',
-              right: '-5px',
-              backgroundColor: 'var(--neon-cyan)',
-              color: 'black',
-              borderRadius: '50%',
-              width: '16px',
-              height: '16px',
-              fontSize: '0.7rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 'bold',
-              boxShadow: '0 0 5px rgba(0, 255, 187, 0.7)'
-            }}>
-              4
-            </div>
-          </motion.button>
-          
-          <AnimatePresence>
-            {tokensVisible && (
-              <motion.div 
-                className="token-dropdown" 
-                style={{
-                  position: 'absolute',
-                  top: '40px',
-                  right: '0',
-                  backgroundColor: 'rgba(12, 23, 42, 0.95)',
-                  borderRadius: '10px',
-                  padding: '10px',
-                  boxShadow: '0 0 15px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 255, 187, 0.3)',
-                  border: '1px solid var(--neon-cyan)',
-                  zIndex: 100,
-                  backdropFilter: 'blur(5px)',
-                  width: '200px'
-                }}
-                initial={{ opacity: 0, scale: 0.8, y: -10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.8, y: -10 }}
-                transition={{ duration: 0.2 }}
+            {/* Mobile Menu Toggle */}
+            <motion.button 
+              className="mobile-menu-toggle"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              style={{
+                background: 'rgba(0,0,0,0.4)',
+                border: '1px solid var(--neon-red)',
+                borderRadius: '8px',
+                width: '40px',
+                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: '0 0 10px rgba(255, 62, 62, 0.3)',
+              }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="20" 
+                height="20" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+                style={{ color: 'var(--neon-red)' }}
               >
-                <div style={{ textAlign: 'center', marginBottom: '8px', fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--neon-cyan)', textShadow: '0 0 5px rgba(0, 255, 187, 0.5)' }}>
-                  Your Balance
-                </div>
-                {user && user.tokens ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {[
-                      { symbol: 'BeTyche', short: 'B', amount: user.tokens.BeTyche || 0, color: 'cyan' },
-                      { symbol: 'SOL', short: 'S', amount: user.tokens.SOL || 0, color: 'blue' },
-                      { symbol: 'ETH', short: 'E', amount: user.tokens.ETH || 0, color: 'purple' },
-                      { symbol: 'RADBRO', short: 'R', amount: user.tokens.RADBRO || 0, color: 'pink' }
-                    ].map((token, index) => (
-                      <motion.div 
-                        key={token.symbol}
-                        className="token-row" 
-                        style={{ 
-                          display: 'flex', 
-                          justifyContent: 'space-between', 
-                          alignItems: 'center', 
-                          padding: '6px 10px', 
-                          backgroundColor: `rgba(var(--${token.color}-rgb), 0.05)`, 
-                          borderRadius: '8px' 
-                        }}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.1 }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ 
-                            width: '24px', 
-                            height: '24px', 
-                            borderRadius: '50%', 
-                            backgroundColor: `rgba(var(--${token.color}-rgb), 0.2)`, 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center', 
-                            color: `var(--neon-${token.color})`, 
-                            fontWeight: 'bold', 
-                            fontSize: '0.8rem', 
-                            textShadow: `0 0 3px rgba(var(--${token.color}-rgb), 0.5)` 
-                          }}>
-                            {token.short}
-                          </span>
-                          <span style={{ fontSize: '0.9rem' }}>{token.symbol}</span>
-                        </div>
-                        <span style={{ 
-                          fontSize: '0.9rem', 
-                          fontWeight: 'bold', 
-                          color: `var(--neon-${token.color})` 
-                        }}>
-                          {token.amount.toFixed(2)}
-                        </span>
-                      </motion.div>
-                    ))}
-                  </div>
+                {mobileMenuOpen ? (
+                  <>
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </>
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '20px' }}>
-                    <div className="loading-spinner" style={{ margin: '0 auto 10px' }} />
-                    <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>Loading balances...</div>
-                  </div>
+                  <>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                  </>
                 )}
-                <div style={{ marginTop: '10px', textAlign: 'center' }}>
-                  <Link to="/wallet" style={{ 
-                    fontSize: '0.85rem', 
-                    color: 'var(--text-secondary)', 
-                    textDecoration: 'none', 
-                    display: 'inline-block', 
-                    padding: '4px 10px', 
-                    borderRadius: '4px', 
-                    transition: 'all 0.3s ease' 
-                  }}>
-                    View Wallet Details
-                  </Link>
-                </div>
+              </svg>
+            </motion.button>
+          </div>
+        </div>
+
+        {/* Mobile Navigation Menu */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div 
+              className="mobile-navigation"
+              style={{
+                background: 'rgba(12, 23, 42, 0.95)',
+                borderRadius: '8px',
+                padding: '15px',
+                marginTop: '10px',
+                boxShadow: '0 0 20px rgba(0, 0, 0, 0.8)',
+                border: '1px solid rgba(255, 62, 62, 0.3)',
+                backdropFilter: 'blur(10px)'
+              }}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {/* Navigation Links */}
+                <Link to="/admin" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                  <motion.div 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '10px',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 62, 62, 0.1)',
+                      border: '1px solid rgba(255, 62, 62, 0.3)',
+                    }}
+                    whileHover={{ scale: 1.02 }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-red)' }}>
+                      <circle cx="12" cy="12" r="3"/>
+                      <path d="M12 1v6m0 6v6"/>
+                      <path d="M21 12h-6m-6 0H3"/>
+                    </svg>
+                    <span style={{ color: 'var(--neon-red)', fontWeight: 'bold' }}>ADMIN</span>
+                  </motion.div>
+                </Link>
+
+                <Link to="/ambassador" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                  <motion.div 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '10px',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 62, 62, 0.1)',
+                      border: '1px solid rgba(255, 62, 62, 0.3)',
+                    }}
+                    whileHover={{ scale: 1.02 }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-red)' }}>
+                      <circle cx="12" cy="12" r="3"/>
+                      <path d="M12 1v6m0 6v6"/>
+                      <path d="M21 12h-6m-6 0H3"/>
+                    </svg>
+                    <span style={{ color: 'var(--neon-red)', fontWeight: 'bold' }}>AMBASSADOR</span>
+                  </motion.div>
+                </Link>
+
+                <Link to="/pulse-auth" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                  <motion.div 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '10px',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 62, 62, 0.1)',
+                      border: '1px solid rgba(255, 62, 62, 0.3)',
+                    }}
+                    whileHover={{ scale: 1.02 }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-red)' }}>
+                      <circle cx="12" cy="12" r="3"/>
+                      <path d="M12 1v6m0 6v6"/>
+                      <path d="M21 12h-6m-6 0H3"/>
+                    </svg>
+                    <span style={{ color: 'var(--neon-red)', fontWeight: 'bold' }}>PULSE ACCOUNT</span>
+                  </motion.div>
+                </Link>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Desktop Layout */}
+      <div className="header-desktop">
+        <div className="logo-container">
+          <Link to="/">
+            <motion.h1 
+              className="neon-text pulse-animation" 
+              style={{ 
+                fontSize: '2.2rem',
+                margin: 0,
+                letterSpacing: '3px'
+              }}
+              whileHover={{ scale: 1.05 }}
+            >
+              PULSE
+            </motion.h1>
+          </Link>
+        </div>
+        
+        <motion.div 
+          className="btc-price-container" 
+          style={{
+            background: 'rgba(0,0,0,0.4)',
+            borderRadius: '10px',
+            padding: '8px 15px',
+            boxShadow: '0 0 15px rgba(0, 0, 0, 0.6), inset 0 0 10px rgba(255, 62, 62, 0.1)',
+            border: '1px solid rgba(255, 62, 62, 0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            minWidth: '140px'
+          }}
+          animate={{ 
+            boxShadow: btcPrice 
+              ? `0 0 15px rgba(255, 62, 62, ${0.3 + Math.sin(Date.now() / 2000) * 0.1})` 
+              : '0 0 15px rgba(0, 0, 0, 0.6)'
+          }}
+        >
+          {btcPrice ? (
+            <>
+              <div style={{ fontSize: '0.8rem', marginBottom: '2px', opacity: 0.8 }}>BTC/USD</div>
+              <motion.div 
+                className="price-text btc-price" 
+                style={{ 
+                  fontSize: '1.2rem', 
+                  fontWeight: 'bold',
+                  textAlign: 'center',
+                  color: btcPrice.price > (lastPriceRef.current || 0) ? '#00ff00' : 
+                         btcPrice.price < (lastPriceRef.current || 0) ? '#ff0000' : 'inherit'
+                }}
+                key={btcPrice.timestamp}
+                animate={{ scale: [1, 1.02, 1] }}
+                transition={{ duration: 0.2 }}
+                onAnimationComplete={() => {
+
+                  lastPriceRef.current = btcPrice.price;
+                }}
+              >
+                ${btcPrice.price.toLocaleString(undefined, { 
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                })}
               </motion.div>
+              <div style={{ fontSize: '0.6rem', opacity: 0.6 }}>LIVE</div>
+            </>
+          ) : (
+            <div className="loading-price">Loading...</div>
+          )}
+        </motion.div>
+
+        {/* Right side: Navigation + Wallet */}
+        <div className="header-right-side">
+          {/* Desktop Navigation Buttons */}
+          <div className="desktop-navigation">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {/* Admin Button */}
+              <Link to="/admin" className="admin-link">
+                <motion.div 
+                  className="admin-button" 
+                  style={{
+                    background: 'rgba(0,0,0,0.4)',
+                    borderRadius: '20px',
+                    padding: '6px 12px',
+                    border: '1px solid var(--neon-red)',
+                    boxShadow: '0 0 10px rgba(255, 62, 62, 0.3), inset 0 0 8px rgba(255, 62, 62, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'all 0.3s ease',
+                    cursor: 'pointer'
+                  }}
+                  whileHover={{ scale: 1.02 }}
+                >
+              <span style={{ 
+                width: '24px', 
+                height: '24px', 
+                borderRadius: '50%', 
+                backgroundColor: 'rgba(255, 62, 62, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-red)' }}>
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M12 1v6m0 6v6"/>
+                  <path d="M21 12h-6m-6 0H3"/>
+                </svg>
+              </span>
+              <span className="admin-text" style={{
+                fontSize: '0.9rem',
+                color: 'var(--neon-red)',
+                textShadow: '0 0 3px rgba(255, 62, 62, 0.5)',
+                fontWeight: 'bold'
+              }}>
+                ADMIN
+              </span>
+            </motion.div>
+          </Link>
+
+          {/* Ambassador Button */}
+          <Link to="/ambassador" className="admin-link">
+            <motion.div 
+              className="admin-button" 
+              style={{
+                background: 'rgba(0,0,0,0.4)',
+                borderRadius: '20px',
+                padding: '6px 12px',
+                border: '1px solid var(--neon-red)',
+                boxShadow: '0 0 10px rgba(255, 62, 62, 0.3), inset 0 0 8px rgba(255, 62, 62, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.3s ease',
+                cursor: 'pointer'
+              }}
+              whileHover={{ scale: 1.02 }}
+            >
+              <span style={{ 
+                width: '24px', 
+                height: '24px', 
+                borderRadius: '50%', 
+                backgroundColor: 'rgba(255, 62, 62, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-red)' }}>
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M12 1v6m0 6v6"/>
+                  <path d="M21 12h-6m-6 0H3"/>
+                </svg>
+              </span>
+              <span className="admin-text" style={{
+                fontSize: '0.9rem',
+                color: 'var(--neon-red)',
+                textShadow: '0 0 3px rgba(255, 62, 62, 0.5)',
+                fontWeight: 'bold'
+              }}>
+                AMBASSADOR
+              </span>
+            </motion.div>
+          </Link>
+          
+          {/* Pulse Account Button */}
+          <Link to="/pulse-auth" className="admin-link">
+            <motion.div 
+              className="admin-button" 
+              style={{
+                background: 'rgba(0,0,0,0.4)',
+                borderRadius: '20px',
+                padding: '6px 12px',
+                border: '1px solid var(--neon-red)',
+                boxShadow: '0 0 10px rgba(255, 62, 62, 0.3), inset 0 0 8px rgba(255, 62, 62, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.3s ease',
+                cursor: 'pointer'
+              }}
+              whileHover={{ scale: 1.02 }}
+            >
+              <span style={{ 
+                width: '24px', 
+                height: '24px', 
+                borderRadius: '50%', 
+                backgroundColor: 'rgba(255, 62, 62, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-red)' }}>
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M12 1v6m0 6v6"/>
+                  <path d="M21 12h-6m-6 0H3"/>
+                </svg>
+              </span>
+              <span className="admin-text" style={{
+                fontSize: '0.9rem',
+                color: 'var(--neon-red)',
+                textShadow: '0 0 3px rgba(255, 62, 62, 0.5)',
+                fontWeight: 'bold'
+              }}>
+                PULSE ACCOUNT
+              </span>
+            </motion.div>
+          </Link>
+            </div>
+          </div>
+
+          {/* Desktop Wallet Container */}
+          <div className="desktop-wallet-container">
+            {/* Conditionally rendered wallet section */}
+            {isConnected && address ? (
+              <div className="connected-wallet">
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  gap: '10px'
+                }}>
+                  <Link to="/wallet" className="wallet-link">
+                    <motion.div 
+                      className="wallet-display" 
+                      style={{
+                        background: 'rgba(0,0,0,0.4)',
+                        borderRadius: '20px',
+                        padding: '6px 12px',
+                        border: '1px solid var(--neon-blue)',
+                        boxShadow: '0 0 10px rgba(0, 242, 255, 0.3), inset 0 0 8px rgba(0, 242, 255, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'all 0.3s ease'
+                      }}
+                      whileHover={{ scale: 1.02 }}
+                    >
+                      <span style={{ 
+                        width: '24px', 
+                        height: '24px', 
+                        borderRadius: '50%', 
+                        backgroundColor: 'rgba(0, 242, 255, 0.15)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-blue)' }}>
+                          <rect x="2" y="6" width="20" height="12" rx="2" />
+                          <path d="M12 12h.01" />
+                        </svg>
+                      </span>
+                      <span className="wallet-address" style={{
+                        fontSize: '0.9rem',
+                        color: 'var(--neon-blue)',
+                        textShadow: '0 0 3px rgba(0, 242, 255, 0.5)'
+                      }}>
+                        {address.slice(0, 4)}...{address.slice(-4)}
+                      </span>
+                    </motion.div>
+                  </Link>
+                  
+                  {/* Token Balance Button */}
+                  <div style={{ position: 'relative' }}>
+                    <motion.button 
+                      className="token-toggle-button" 
+                      onClick={() => setTokensVisible(!tokensVisible)}
+                      style={{
+                        backgroundColor: 'rgba(0,0,0,0.4)',
+                        border: '1px solid var(--neon-cyan)',
+                        borderRadius: '50%',
+                        width: '32px',
+                        height: '32px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        boxShadow: '0 0 10px rgba(0, 255, 187, 0.3), inset 0 0 8px rgba(0, 255, 187, 0.1)',
+                        position: 'relative'
+                      }}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-cyan)' }}>
+                        <circle cx="12" cy="12" r="8" />
+                        <line x1="12" y1="16" x2="12" y2="16" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                      </svg>
+                      <div style={{
+                        position: 'absolute',
+                        top: '-5px',
+                        right: '-5px',
+                        backgroundColor: 'var(--neon-cyan)',
+                        color: 'black',
+                        borderRadius: '50%',
+                        width: '16px',
+                        height: '16px',
+                        fontSize: '0.7rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 'bold',
+                        boxShadow: '0 0 5px rgba(0, 255, 187, 0.7)'
+                      }}>
+                        4
+                      </div>
+                    </motion.button>
+                    
+                    <AnimatePresence>
+                      {tokensVisible && (
+                        <motion.div 
+                          className="token-dropdown" 
+                          style={{
+                            position: 'absolute',
+                            top: '40px',
+                            right: '0',
+                            backgroundColor: 'rgba(12, 23, 42, 0.95)',
+                            borderRadius: '10px',
+                            padding: '10px',
+                            boxShadow: '0 0 15px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 255, 187, 0.3)',
+                            border: '1px solid var(--neon-cyan)',
+                            zIndex: 100,
+                            backdropFilter: 'blur(5px)',
+                            width: '200px'
+                          }}
+                          initial={{ opacity: 0, scale: 0.8, y: -10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.8, y: -10 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <div style={{ textAlign: 'center', marginBottom: '8px', fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--neon-cyan)', textShadow: '0 0 5px rgba(0, 255, 187, 0.5)' }}>
+                            Your Balance
+                          </div>
+                          {user && user.tokens ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {[
+                                { symbol: 'BeTyche', short: 'B', amount: user.tokens.BeTyche || 0, color: 'cyan' },
+                                { symbol: 'SOL', short: 'S', amount: user.tokens.SOL || 0, color: 'blue' },
+                                { symbol: 'ETH', short: 'E', amount: user.tokens.ETH || 0, color: 'purple' },
+                                { symbol: 'RADBRO', short: 'R', amount: user.tokens.RADBRO || 0, color: 'pink' }
+                              ].map((token, index) => (
+                                <motion.div 
+                                  key={token.symbol}
+                                  className="token-row" 
+                                  style={{ 
+                                    display: 'flex', 
+                                    justifyContent: 'space-between', 
+                                    alignItems: 'center', 
+                                    padding: '6px 10px', 
+                                    backgroundColor: `rgba(var(--${token.color}-rgb), 0.05)`, 
+                                    borderRadius: '8px' 
+                                  }}
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ delay: index * 0.1 }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ 
+                                      width: '24px', 
+                                      height: '24px', 
+                                      borderRadius: '50%', 
+                                      backgroundColor: `rgba(var(--${token.color}-rgb), 0.2)`, 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      justifyContent: 'center', 
+                                      color: `var(--neon-${token.color})`, 
+                                      fontWeight: 'bold', 
+                                      fontSize: '0.8rem', 
+                                      textShadow: `0 0 3px rgba(var(--${token.color}-rgb), 0.5)` 
+                                    }}>
+                                      {token.short}
+                                    </span>
+                                    <span style={{ fontSize: '0.9rem' }}>{token.symbol}</span>
+                                  </div>
+                                  <span style={{ 
+                                    fontSize: '0.9rem', 
+                                    fontWeight: 'bold', 
+                                    color: `var(--neon-${token.color})` 
+                                  }}>
+                                    {token.amount.toFixed(2)}
+                                  </span>
+                                </motion.div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ textAlign: 'center', padding: '20px' }}>
+                              <div className="loading-spinner" style={{ margin: '0 auto 10px' }} />
+                              <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>Loading balances...</div>
+                            </div>
+                          )}
+                          <div style={{ marginTop: '10px', textAlign: 'center' }}>
+                            <Link to="/wallet" style={{ 
+                              fontSize: '0.85rem', 
+                              color: 'var(--text-secondary)', 
+                              textDecoration: 'none', 
+                              display: 'inline-block', 
+                              padding: '4px 10px', 
+                              borderRadius: '4px', 
+                              transition: 'all 0.3s ease' 
+                            }}>
+                              View Wallet Details
+                            </Link>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="connect-wallet-section">
+                <button 
+                  onClick={() => appKit.open()}
+                  className="connect-wallet-button"
+                  style={{
+                    position: 'relative',
+                    background: 'linear-gradient(135deg, #00d4ff 0%, #00b4d8 50%, #0077b6 100%)',
+                    border: 'none',
+                    padding: '12px 24px',
+                    borderRadius: '25px',
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    color: '#000',
+                    cursor: 'pointer',
+                    textTransform: 'uppercase',
+                    letterSpacing: '1px',
+                    transition: 'all 0.3s ease',
+                    boxShadow: '0 0 15px rgba(0, 212, 255, 0.3)',
+                    whiteSpace: 'nowrap'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 0 25px rgba(0, 212, 255, 0.5)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 0 15px rgba(0, 212, 255, 0.3)';
+                  }}
+                >
+                  Connect Wallet
+                </button>
+              </div>
             )}
-          </AnimatePresence>
+          </div>
         </div>
       </div>
-    </div>
-  ) : (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-      <button 
-        onClick={() => appKit.open()}
-        style={{
-          position: 'relative',
-          background: 'linear-gradient(135deg, #00d4ff 0%, #00b4d8 50%, #0077b6 100%)',
-          border: 'none',
-          padding: '18px 40px',
-          borderRadius: '50px',
-          fontSize: '18px',
-          fontWeight: '700',
-          color: '#000',
-          cursor: 'pointer',
-          textTransform: 'uppercase',
-          letterSpacing: '1.5px',
-          transition: 'all 0.3s ease',
-          boxShadow: '0 0 20px rgba(0, 212, 255, 0.3), 0 0 40px rgba(0, 212, 255, 0.1)',
-        }}
-        onMouseEnter={(e) => {
-          e.target.style.transform = 'translateY(-2px)';
-          e.target.style.boxShadow = '0 0 30px rgba(0, 212, 255, 0.5), 0 0 60px rgba(0, 212, 255, 0.2)';
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.transform = 'translateY(0)';
-          e.target.style.boxShadow = '0 0 20px rgba(0, 212, 255, 0.3), 0 0 40px rgba(0, 212, 255, 0.1)';
-        }}
-      >
-        Connect Wallet
-      </button>
-    </div>
-  )}
-</div>
+
+      {/* Mobile-only Wallet Container */}
+      <div className="mobile-wallet-container">
+        {/* Conditionally rendered wallet section for mobile */}
+        {isConnected && address ? (
+          <div className="connected-wallet">
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              gap: '10px',
+              flexWrap: 'wrap',
+              justifyContent: 'center'
+            }}>
+              <Link to="/wallet" className="wallet-link">
+                <motion.div 
+                  className="wallet-display" 
+                  style={{
+                    background: 'rgba(0,0,0,0.4)',
+                    borderRadius: '20px',
+                    padding: '6px 12px',
+                    border: '1px solid var(--neon-blue)',
+                    boxShadow: '0 0 10px rgba(0, 242, 255, 0.3), inset 0 0 8px rgba(0, 242, 255, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'all 0.3s ease'
+                  }}
+                  whileHover={{ scale: 1.02 }}
+                >
+                  <span style={{ 
+                    width: '24px', 
+                    height: '24px', 
+                    borderRadius: '50%', 
+                    backgroundColor: 'rgba(0, 242, 255, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-blue)' }}>
+                      <rect x="2" y="6" width="20" height="12" rx="2" />
+                      <path d="M12 12h.01" />
+                    </svg>
+                  </span>
+                  <span className="wallet-address" style={{
+                    fontSize: '0.9rem',
+                    color: 'var(--neon-blue)',
+                    textShadow: '0 0 3px rgba(0, 242, 255, 0.5)'
+                  }}>
+                    {address.slice(0, 4)}...{address.slice(-4)}
+                  </span>
+                </motion.div>
+              </Link>
+              
+              {/* Token Balance Button */}
+              <div style={{ position: 'relative' }}>
+                <motion.button 
+                  className="token-toggle-button" 
+                  onClick={() => setTokensVisible(!tokensVisible)}
+                  style={{
+                    backgroundColor: 'rgba(0,0,0,0.4)',
+                    border: '1px solid var(--neon-cyan)',
+                    borderRadius: '50%',
+                    width: '32px',
+                    height: '32px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 0 10px rgba(0, 255, 187, 0.3), inset 0 0 8px rgba(0, 255, 187, 0.1)',
+                    position: 'relative'
+                  }}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--neon-cyan)' }}>
+                    <circle cx="12" cy="12" r="8" />
+                    <line x1="12" y1="16" x2="12" y2="16" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                  </svg>
+                  <div style={{
+                    position: 'absolute',
+                    top: '-5px',
+                    right: '-5px',
+                    backgroundColor: 'var(--neon-cyan)',
+                    color: 'black',
+                    borderRadius: '50%',
+                    width: '16px',
+                    height: '16px',
+                    fontSize: '0.7rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 'bold',
+                    boxShadow: '0 0 5px rgba(0, 255, 187, 0.7)'
+                  }}>
+                    4
+                  </div>
+                </motion.button>
+                
+                <AnimatePresence>
+                  {tokensVisible && (
+                    <motion.div 
+                      className="token-dropdown" 
+                      style={{
+                        position: 'absolute',
+                        top: '40px',
+                        right: '0',
+                        backgroundColor: 'rgba(12, 23, 42, 0.95)',
+                        borderRadius: '10px',
+                        padding: '10px',
+                        boxShadow: '0 0 15px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 255, 187, 0.3)',
+                        border: '1px solid var(--neon-cyan)',
+                        zIndex: 100,
+                        backdropFilter: 'blur(5px)',
+                        width: '200px'
+                      }}
+                      initial={{ opacity: 0, scale: 0.8, y: -10 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.8, y: -10 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <div style={{ textAlign: 'center', marginBottom: '8px', fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--neon-cyan)', textShadow: '0 0 5px rgba(0, 255, 187, 0.5)' }}>
+                        Your Balance
+                      </div>
+                      {user && user.tokens ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {[
+                            { symbol: 'BeTyche', short: 'B', amount: user.tokens.BeTyche || 0, color: 'cyan' },
+                            { symbol: 'SOL', short: 'S', amount: user.tokens.SOL || 0, color: 'blue' },
+                            { symbol: 'ETH', short: 'E', amount: user.tokens.ETH || 0, color: 'purple' },
+                            { symbol: 'RADBRO', short: 'R', amount: user.tokens.RADBRO || 0, color: 'pink' }
+                          ].map((token, index) => (
+                            <motion.div 
+                              key={token.symbol}
+                              className="token-row" 
+                              style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center', 
+                                padding: '6px 10px', 
+                                backgroundColor: `rgba(var(--${token.color}-rgb), 0.05)`, 
+                                borderRadius: '8px' 
+                              }}
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: index * 0.1 }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ 
+                                  width: '24px', 
+                                  height: '24px', 
+                                  borderRadius: '50%', 
+                                  backgroundColor: `rgba(var(--${token.color}-rgb), 0.2)`, 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center', 
+                                  color: `var(--neon-${token.color})`, 
+                                  fontWeight: 'bold', 
+                                  fontSize: '0.8rem', 
+                                  textShadow: `0 0 3px rgba(var(--${token.color}-rgb), 0.5)` 
+                                }}>
+                                  {token.short}
+                                </span>
+                                <span style={{ fontSize: '0.9rem' }}>{token.symbol}</span>
+                              </div>
+                              <span style={{ 
+                                fontSize: '0.9rem', 
+                                fontWeight: 'bold', 
+                                color: `var(--neon-${token.color})` 
+                              }}>
+                                {token.amount.toFixed(2)}
+                              </span>
+                            </motion.div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '20px' }}>
+                          <div className="loading-spinner" style={{ margin: '0 auto 10px' }} />
+                          <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>Loading balances...</div>
+                        </div>
+                      )}
+                      <div style={{ marginTop: '10px', textAlign: 'center' }}>
+                        <Link to="/wallet" style={{ 
+                          fontSize: '0.85rem', 
+                          color: 'var(--text-secondary)', 
+                          textDecoration: 'none', 
+                          display: 'inline-block', 
+                          padding: '4px 10px', 
+                          borderRadius: '4px', 
+                          transition: 'all 0.3s ease' 
+                        }}>
+                          View Wallet Details
+                        </Link>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="connect-wallet-section">
+            <button 
+              onClick={() => appKit.open()}
+              className="connect-wallet-button"
+              style={{
+                position: 'relative',
+                background: 'linear-gradient(135deg, #00d4ff 0%, #00b4d8 50%, #0077b6 100%)',
+                border: 'none',
+                padding: '12px 24px',
+                borderRadius: '25px',
+                fontSize: '14px',
+                fontWeight: '700',
+                color: '#000',
+                cursor: 'pointer',
+                textTransform: 'uppercase',
+                letterSpacing: '1px',
+                transition: 'all 0.3s ease',
+                boxShadow: '0 0 15px rgba(0, 212, 255, 0.3)',
+                whiteSpace: 'nowrap'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.transform = 'translateY(-2px)';
+                e.target.style.boxShadow = '0 0 25px rgba(0, 212, 255, 0.5)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = '0 0 15px rgba(0, 212, 255, 0.3)';
+              }}
+            >
+              Connect Wallet
+            </button>
+          </div>
+        )}
+      </div>
     </header>
   );
 };
@@ -1177,6 +1641,85 @@ const GameSetupScreen = ({ showToast }) => {
   const [isCreatingBet, setIsCreatingBet] = useState(false);
   const [error, setError] = useState('');
   
+  // Transaction deduplication cache to prevent duplicate submissions
+  const [recentTransactions, setRecentTransactions] = useState(new Map());
+  
+  // Rate limiting state
+  const [userTransactionCount, setUserTransactionCount] = useState(0);
+  const [lastTransactionTime, setLastTransactionTime] = useState(0);
+  
+  // Function to create a unique transaction hash
+  const createTransactionHash = (address, token, amount, direction, duration) => {
+    // Create a more unique hash that includes timestamp to prevent false duplicates
+    const timestamp = Math.floor(Date.now() / 1000); // Use seconds to group similar time transactions
+    const uniqueString = `${address}_${token}_${amount}_${direction}_${duration}_${timestamp}`;
+    console.log('🔑 Creating transaction hash:', uniqueString);
+    return uniqueString;
+  };
+  
+  // Function to clear transaction cache (useful for debugging)
+  const clearTransactionCache = () => {
+    setRecentTransactions(new Map());
+    setUserTransactionCount(0);
+    setLastTransactionTime(0);
+    console.log('🧹 Transaction cache and rate limiter cleared');
+  };
+  
+  // Function to check if transaction is recent (within last 5 minutes)
+  const isTransactionRecent = (transactionKey) => {
+    const transaction = recentTransactions.get(transactionKey);
+    if (!transaction) return false;
+    
+    const now = Date.now();
+    const fiveMinutesAgo = now - (5 * 60 * 1000);
+    
+    // If transaction is older than 5 minutes, it's not recent
+    if (transaction.timestamp <= fiveMinutesAgo) return false;
+    
+    // If transaction is still being processed (creating, created, sending), consider it recent
+    if (transaction.status && ['creating', 'created', 'sending'].includes(transaction.status)) {
+      console.log(`⚠️ Transaction ${transactionKey} is still being processed with status: ${transaction.status}`);
+      return true;
+    }
+    
+    // If transaction was sent but not yet confirmed, consider it recent
+    if (transaction.status === 'sent' && transaction.signature) {
+      console.log(`⚠️ Transaction ${transactionKey} was sent with signature: ${transaction.signature}`);
+      return true;
+    }
+    
+    return true;
+  };
+  
+  // Function to check rate limiting (max 3 transactions per minute)
+  const isRateLimited = () => {
+    const now = Date.now();
+    const oneMinuteAgo = now - (60 * 1000);
+    
+    // Reset counter if more than 1 minute has passed
+    if (lastTransactionTime < oneMinuteAgo) {
+      setUserTransactionCount(0);
+      setLastTransactionTime(now);
+      return false;
+    }
+    
+    // Check if user has exceeded rate limit
+    return userTransactionCount >= 3;
+  };
+  
+  // Function to get cache details for debugging
+  const getCacheDetails = () => {
+    const now = Date.now();
+    const details = Array.from(recentTransactions.entries()).map(([key, value]) => ({
+      key,
+      age: Math.round((now - value.timestamp) / 1000),
+      details: value.details
+    }));
+    console.log('📊 Cache details:', details);
+    console.log('🚦 Rate limiting:', { userTransactionCount, lastTransactionTime: new Date(lastTransactionTime) });
+    return details;
+  };
+  
   // Token status for wallet display
   const [tokenStatus, setTokenStatus] = useState({
     BeTyche: { enabled: true },
@@ -1187,86 +1730,106 @@ const GameSetupScreen = ({ showToast }) => {
   
   // Dynamic token limits - will be fetched from admin settings
   const [tokenLimits, setTokenLimits] = useState({
-    BeTyche: { min: 100, max: 1000000, enabled: true },
+    BeTyche: { min: 100, max: 1000000, enabled: false },
     SOL: { min: 0.00001, max: 100, enabled: true },
-    ETH: { min: 0.001, max: 10, enabled: true },
-    RADBRO: { min: 100, max: 10000000, enabled: true }
+    ETH: { min: 0.001, max: 10, enabled: false },
+    RADBRO: { min: 100, max: 10000000, enabled: false }
   });
   
   // House fee percentage state
   const [houseFee, setHouseFee] = useState(5); // Default to 5, will be updated from backend
   
+  // House wallet check state
+  const [isHouseWallet, setIsHouseWallet] = useState(false);
+  
   // Fetch admin settings for token limits
   const fetchAdminSettings = async () => {
     try {
-      // Use the validation endpoint to get current limits for each token
-      const tokens = ['BeTyche', 'SOL', 'ETH', 'RADBRO'];
-      const dynamicLimits = {};
-      const newTokenStatus = {};
+      console.log('🔄 Fetching admin settings from API...');
       
-      // Define appropriate test amounts for each token
-      const testAmounts = {
-        'BeTyche': 1000,
-        'SOL': 0.00001,
-        'ETH': 0.001,
-        'RADBRO': 1000
+      // Fetch settings from API endpoint
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://api.casino.com'}api/admin/settings`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        const settings = data.data;
+        
+        // Map API response to token limits format
+        const dynamicLimits = {
+          BeTyche: { 
+            min: settings.betLimits?.BeTyche?.min || 100, 
+            max: settings.betLimits?.BeTyche?.max || 1000000, 
+            enabled: settings.enabledTokens?.BeTyche || true 
+          },
+          SOL: { 
+            min: settings.betLimits?.SOL?.min || 0.00001, 
+            max: settings.betLimits?.SOL?.max || 100, 
+            enabled: settings.enabledTokens?.SOL || true 
+          },
+          ETH: { 
+            min: settings.betLimits?.ETH?.min || 0.001, 
+            max: settings.betLimits?.ETH?.max || 10, 
+            enabled: settings.enabledTokens?.ETH || false 
+          },
+          RADBRO: { 
+            min: settings.betLimits?.RADBRO?.min || 100, 
+            max: settings.betLimits?.RADBRO?.max || 10000000, 
+            enabled: settings.enabledTokens?.RADBRO || true 
+          }
+        };
+        // Map API response to token status format
+        const newTokenStatus = {
+          BeTyche: { enabled: settings.enabledTokens?.BeTyche || true },
+          SOL: { enabled: settings.enabledTokens?.SOL || true },
+          ETH: { enabled: settings.enabledTokens?.ETH || false },
+          RADBRO: { enabled: settings.enabledTokens?.RADBRO || true }
+        };
+        
+        setTokenLimits(dynamicLimits);
+        setTokenStatus(newTokenStatus);
+        console.log('✅ Loaded dynamic token limits from API:', dynamicLimits);
+        
+        // Set house fee from API
+        setHouseFee(settings.houseFeePercentage || 10);
+        console.log('✅ Set house fee from API:', settings.houseFeePercentage || 10);
+        
+      } else {
+        throw new Error('Invalid API response format');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error fetching admin settings from API:', error);
+      
+      // Fallback to default hardcoded values if API fails
+      console.log('🔄 Falling back to default settings...');
+      const defaultLimits = {
+        BeTyche: { min: 100, max: 1000000, enabled: true },
+        SOL: { min: 0.00001, max: 100, enabled: true },
+        ETH: { min: 0.001, max: 10, enabled: false },
+        RADBRO: { min: 100, max: 10000000, enabled: true }
       };
       
-      for (const token of tokens) {
-        try {
-          // Test with appropriate amount for each token
-          const response = await api.post('/api/game/bet/validate', {
-            token: token,
-            amount: testAmounts[token]
-          });
-          
-          if (response.data.success) {
-            dynamicLimits[token] = {
-              ...response.data.data.limits,
-              enabled: true
-            };
-            newTokenStatus[token] = { enabled: true };
-            console.log(`✅ Token ${token} is enabled with limits:`, response.data.data.limits);
-          }
-        } catch (error) {
-          // Check if the error is due to insufficient house balance (token is enabled but house can't cover)
-          const errorMessage = error.response?.data?.message || error.message;
-          const isInsufficientBalance = errorMessage.includes('Insufficient house balance') || 
-                                       errorMessage.includes('House has insufficient balance');
-          
-          if (isInsufficientBalance) {
-            // Token is enabled but house balance is insufficient
-            dynamicLimits[token] = {
-              min: 0,
-              max: 0,
-              enabled: true // Still enabled, just can't bet due to house balance
-            };
-            newTokenStatus[token] = { enabled: true };
-            console.log(`⚠️ Token ${token} is enabled but house balance insufficient:`, errorMessage);
-          } else {
-            // Token is actually disabled
-            dynamicLimits[token] = {
-              min: 0,
-              max: 0,
-              enabled: false
-            };
-            newTokenStatus[token] = { enabled: false };
-            console.log(`❌ Token ${token} is disabled:`, errorMessage);
-          }
-        }
-      }
+      const defaultTokenStatus = {
+        BeTyche: { enabled: true },
+        SOL: { enabled: true },
+        ETH: { enabled: false },
+        RADBRO: { enabled: true }
+      };
       
-      setTokenLimits(dynamicLimits);
-      setTokenStatus(newTokenStatus);
-      console.log('✅ Updated token limits from validation endpoint:', dynamicLimits);
-      // Fetch admin settings for fee
-      const settingsRes = await api.get('/api/admin/settings');
-      if (settingsRes.data && settingsRes.data.data && typeof settingsRes.data.data.houseFeePercentage === 'number') {
-        setHouseFee(settingsRes.data.data.houseFeePercentage);
-      }
-    } catch (error) {
-      console.error('❌ Error fetching admin settings:', error);
-      // Keep default limits if fetch fails
+      setTokenLimits(defaultLimits);
+      setTokenStatus(defaultTokenStatus);
+      setHouseFee(10);
+      console.log('✅ Set fallback token limits:', defaultLimits);
     }
   };
 
@@ -1382,15 +1945,61 @@ const GameSetupScreen = ({ showToast }) => {
   
   const handleProceed = () => {
     if (validateBet()) {
+      // Add a small delay to prevent rapid double-clicks
+      if (isCreatingBet) {
+        console.log('⚠️ Bet creation already in progress, ignoring duplicate click');
+        return;
+      }
+      
       setShowConfirmation(true);
     }
   };
   
-  const handleConfirmBet = async () => {
+    const handleConfirmBet = async () => {
     if (!isConnected || !address || !user) return;
+
+    // Prevent multiple submissions
+    if (isCreatingBet) {
+      console.log('⚠️ Bet creation already in progress, ignoring duplicate click');
+      return;
+    }
+    
+    // Create a unique transaction identifier to prevent duplicates
+    const transactionKey = createTransactionHash(address, selectedToken, betAmount, selectedDirection, duration);
+    console.log('🔑 Generated transaction key:', transactionKey);
+    console.log('📋 Transaction details:', { address, selectedToken, betAmount, selectedDirection, duration });
+    
+    // Check if this exact transaction was recently submitted
+    if (isTransactionRecent(transactionKey)) {
+      console.log('⚠️ Duplicate transaction detected, ignoring submission');
+      console.log('📊 Recent transactions cache:', Array.from(recentTransactions.entries()));
+      setError('This exact bet was recently submitted. Please wait or change the bet parameters.');
+      setTimeout(() => setError(''), 5000);
+      return;
+    }
+    
+    // Check rate limiting
+    if (isRateLimited()) {
+      console.log('⚠️ Rate limit exceeded, ignoring submission');
+      setError('Too many transactions. Please wait a moment before trying again.');
+      setTimeout(() => setError(''), 5000);
+      return;
+    }
     
     setIsCreatingBet(true);
     setError('');
+    
+    // Add transaction to deduplication cache IMMEDIATELY to prevent duplicates
+    setRecentTransactions(prev => {
+      const newMap = new Map(prev);
+      newMap.set(transactionKey, {
+        timestamp: Date.now(),
+        details: { address, selectedToken, betAmount, selectedDirection, duration },
+        status: 'creating' // Add status to track transaction state
+      });
+      console.log('✅ Added transaction to cache immediately:', transactionKey);
+      return newMap;
+    });
     
     try {
       // Step 0: PRE-VALIDATE BET BEFORE SENDING TRANSACTION
@@ -1407,13 +2016,35 @@ const GameSetupScreen = ({ showToast }) => {
       // Step 1: Create the transaction
       console.log('🔐 Creating blockchain transaction...');
       
-      const { transaction, connection } = await createTransferToHouseTransaction(
+      // Update transaction status to 'created'
+      setRecentTransactions(prev => {
+        const newMap = new Map(prev);
+        const existing = newMap.get(transactionKey);
+        if (existing) {
+          existing.status = 'created';
+        }
+        return newMap;
+      });
+      
+      const { transaction, connection, uniqueNonce } = await createTransferToHouseTransaction(
         address,
         parseFloat(betAmount),
         selectedToken
       );
       
-      console.log('📝 Requesting wallet signature...');
+      console.log('🔑 Transaction created with nonce:', uniqueNonce);
+      
+      // Update transaction status to 'sending'
+      setRecentTransactions(prev => {
+        const newMap = new Map(prev);
+        const existing = newMap.get(transactionKey);
+        if (existing) {
+          existing.status = 'sending';
+        }
+        return newMap;
+      });
+      
+      console.log('Requesting wallet signature...');
       
       // Step 2: Get the wallet provider correctly
       if (!walletProvider) {
@@ -1425,26 +2056,68 @@ const GameSetupScreen = ({ showToast }) => {
       
       try {
         // Method 1: Try using sendTransaction
-        if (walletProvider.sendTransaction) {
-          signature = await walletProvider.sendTransaction(transaction, connection);
-        } 
-        // Method 2: Try using signAndSendTransaction
-        else if (walletProvider.signAndSendTransaction) {
-          const result = await walletProvider.signAndSendTransaction(transaction);
-          signature = result.signature;
-        }
+        // if (walletProvider.sendTransaction) {
+        //   signature = await walletProvider.sendTransaction(transaction, connection);
+        // } 
+        // // Method 2: Try using signAndSendTransaction
+        // else if (walletProvider.signAndSendTransaction) {
+        //   const result = await walletProvider.signAndSendTransaction(transaction);
+        //   signature = result.signature;
+        // }
         // Method 3: Sign then send separately
-        else if (walletProvider.signTransaction) {
+        //else if (walletProvider.signTransaction) {
           const signedTx = await walletProvider.signTransaction(transaction);
           signature = await connection.sendRawTransaction(signedTx.serialize());
-        }
-        else {
-          throw new Error('Wallet does not support any transaction methods');
-        }
+       // }
+        // else {
+        //   throw new Error('Wallet does not support any transaction methods');
+        // }
       } catch (walletError) {
         console.error('Wallet error:', walletError);
+        
+        // Handle specific Solana transaction errors
+        if (walletError.message && walletError.message.includes('already been processed')) {
+          console.log('⚠️ Transaction already processed - this may be a duplicate attempt');
+          
+          // Check if we can extract the signature from the error or recent transactions
+          // The backend will reject if it's truly a duplicate via signature tracking
+          
+          // Remove from cache to allow retry if backend rejects
+          setRecentTransactions(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(transactionKey);
+            return newMap;
+          });
+          console.log(walletError.message)
+          throw new Error('Duplicate transaction detected by Solana network. If your bet was not created, please wait 30 seconds and try again, or try a slightly different amount (e.g., 0.101 instead of 0.1).');
+        }
+        
+        // Handle other common Solana errors
+        if (walletError.message && walletError.message.includes('insufficient balance')) {
+          throw new Error('Insufficient balance for this transaction.');
+        }
+        
+        if (walletError.message && walletError.message.includes('blockhash')) {
+          throw new Error('Transaction expired. Please try again.');
+        }
+        
+        if (walletError.message && walletError.message.includes('User rejected')) {
+          throw new Error('Transaction cancelled by user.');
+        }
+        
         throw new Error('Failed to sign transaction. Make sure your wallet is unlocked.');
       }
+      
+      // Update transaction status to 'sent'
+      setRecentTransactions(prev => {
+        const newMap = new Map(prev);
+        const existing = newMap.get(transactionKey);
+        if (existing) {
+          existing.status = 'sent';
+          existing.signature = signature;
+        }
+        return newMap;
+      });
       
       // Wait for confirmation
       console.log('⏳ Waiting for confirmation...');
@@ -1461,6 +2134,35 @@ const GameSetupScreen = ({ showToast }) => {
       
       console.log('✅ Transaction confirmed:', signature);
       
+      // Verify transaction signature is unique
+      if (!signature || signature.length === 0) {
+        throw new Error('Invalid transaction signature received');
+      }
+      
+      console.log('🔍 Transaction signature:', signature);
+      
+      // Clean up old entries from cache (remove transactions older than 5 minutes)
+      setRecentTransactions(prev => {
+        const newMap = new Map(prev);
+        const now = Date.now();
+        const fiveMinutesAgo = now - (5 * 60 * 1000);
+        for (const [key, value] of newMap.entries()) {
+          if (value.timestamp < fiveMinutesAgo) {
+            newMap.delete(key);
+          }
+        }
+        console.log('🧹 Cleaned up old cache entries, new size:', newMap.size);
+        return newMap;
+      });
+      
+      // Update rate limiting counters
+      setUserTransactionCount(prev => prev + 1);
+      setLastTransactionTime(Date.now());
+      console.log('🚦 Rate limiting updated:', { 
+        newCount: userTransactionCount + 1, 
+        newTime: new Date() 
+      });
+      
       // Step 3: Create bet with transaction signature
       const betData = {
         userId: address.toString(),
@@ -1468,7 +2170,9 @@ const GameSetupScreen = ({ showToast }) => {
         amount: parseFloat(betAmount),
         token: selectedToken,
         duration: duration,
-        transactionSignature: signature
+        transactionSignature: signature,
+        transactionId: `${address.toString()}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        uniqueNonce: uniqueNonce
       };
     
 
@@ -1491,12 +2195,29 @@ console.log('📤 Sending bet data to backend:', betData);
       }
     } catch (error) {
       console.error('Error creating bet:', error);
+      
+      // Remove failed transaction from cache to allow retry
+      setRecentTransactions(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(transactionKey);
+        return newMap;
+      });
+      
       // Show backend error as toast
       const backendMsg = error?.response?.data?.message || error.message || 'Failed to create bet';
       showToast(backendMsg, 'error');
       setShowConfirmation(false);
     } finally {
       setIsCreatingBet(false);
+      
+      // Clean up transaction from cache after 5 minutes to allow retries
+      setTimeout(() => {
+        setRecentTransactions(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(transactionKey);
+          return newMap;
+        });
+      }, 5 * 60 * 1000);
     }
   };
   const handleCancelConfirmation = () => {
@@ -1545,13 +2266,13 @@ console.log('📤 Sending bet data to backend:', betData);
       textAlign: 'center',
       boxShadow: '0 0 40px rgba(255, 0, 0, 0.5)'
     }}>
-      <motion.div
-        animate={{ rotate: [0, 360] }}
-        transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-        style={{ fontSize: '4rem', marginBottom: '20px' }}
-      >
-        ⚠️
-      </motion.div>
+              <motion.div
+          animate={{ rotate: [0, 360] }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+          style={{ fontSize: '4rem', marginBottom: '20px' }}
+        >
+          !
+        </motion.div>
       <h2 style={{ color: '#ff0000', marginBottom: '20px' }}>
         BETTING TEMPORARILY UNAVAILABLE
       </h2>
@@ -1770,7 +2491,7 @@ console.log('📤 Sending bet data to backend:', betData);
                     color: '#ff0000'
                   }}>
                     <div style={{ fontSize: '1rem', fontWeight: 'bold', marginBottom: '5px' }}>
-                      ⚠️ No Tokens Available
+                      No Tokens Available
                     </div>
                     <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>
                       All tokens are currently disabled by admin
@@ -1820,6 +2541,86 @@ console.log('📤 Sending bet data to backend:', betData);
                 <span>Min: {tokenLimits[selectedToken]?.enabled ? tokenLimits[selectedToken]?.min || '---' : 'DISABLED'}</span>
                 <span>Max: {tokenLimits[selectedToken]?.enabled ? tokenLimits[selectedToken]?.max || '---' : 'DISABLED'}</span>
               </div>
+              
+              {/* Debug Information - Transaction Cache Status */}
+              {process.env.NODE_ENV === 'development' && (
+                <div style={{ 
+                  marginTop: '15px',
+                  padding: '10px',
+                  background: 'rgba(0, 0, 0, 0.3)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem'
+                }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    marginBottom: '8px'
+                  }}>
+                    <span style={{ opacity: 0.8 }}>Transaction Cache:</span>
+                    <span style={{ 
+                      color: recentTransactions.size > 0 ? '#22c55e' : '#6b7280',
+                      fontWeight: 'bold'
+                    }}>
+                      {recentTransactions.size} cached
+                    </span>
+                  </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    marginBottom: '8px'
+                  }}>
+                    <span style={{ opacity: 0.8 }}>Rate Limiting:</span>
+                    <span style={{ 
+                      color: userTransactionCount < 3 ? '#22c55e' : '#f59e0b',
+                      fontWeight: 'bold'
+                    }}>
+                      {userTransactionCount}/3 per minute
+                    </span>
+                  </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center'
+                  }}>
+                    <span style={{ opacity: 0.6 }}>Debug:</span>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <button
+                        onClick={getCacheDetails}
+                        style={{
+                          background: 'rgba(0, 255, 187, 0.2)',
+                          border: '1px solid rgba(0, 255, 187, 0.5)',
+                          borderRadius: '4px',
+                          padding: '2px 8px',
+                          fontSize: '0.7rem',
+                          color: '#00ffbb',
+                          cursor: 'pointer'
+                        }}
+                        title="Show cache details in console"
+                      >
+                        Show Details
+                      </button>
+                      <button
+                        onClick={clearTransactionCache}
+                        style={{
+                          background: 'rgba(255, 0, 0, 0.2)',
+                          border: '1px solid rgba(255, 0, 0, 0.5)',
+                          borderRadius: '4px',
+                          padding: '2px 8px',
+                          fontSize: '0.7rem',
+                          color: '#ff0000',
+                          cursor: 'pointer'
+                        }}
+                        title="Clear transaction cache"
+                      >
+                        Clear Cache
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* Error Message */}
@@ -1828,7 +2629,7 @@ console.log('📤 Sending bet data to backend:', betData);
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 style={{
-                  padding: '10px',
+                  padding: '15px',
                   marginBottom: '20px',
                   borderRadius: '8px',
                   background: 'rgba(255, 0, 0, 0.1)',
@@ -1837,65 +2638,44 @@ console.log('📤 Sending bet data to backend:', betData);
                   textAlign: 'center'
                 }}
               >
-                {error}
+                <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>⚠️ Transaction Error</div>
+                <div>{error}</div>
+                {error.includes('already submitted') && (
+                  <div style={{ 
+                    fontSize: '0.8rem', 
+                    opacity: 0.8, 
+                    marginTop: '8px',
+                    padding: '8px',
+                    background: 'rgba(255, 0, 0, 0.1)',
+                    borderRadius: '4px'
+                  }}>
+                    💡 Tip: Check your wallet for pending transactions or wait a few minutes before retrying.
+                  </div>
+                )}
               </motion.div>
             )}
 
-<motion.div
-  style={{
-    position: 'fixed',
-    top: '80px',
-    right: '20px',
-    background: 'rgba(0, 0, 0, 0.9)',
-    borderRadius: '12px',
-    padding: '15px 20px',
-    border: '2px solid var(--neon-cyan)',
-    boxShadow: '0 0 20px rgba(0, 255, 187, 0.5)',
-    zIndex: 100
-  }}
-  initial={{ opacity: 0, x: 100 }}
-  animate={{ opacity: 1, x: 0 }}
-  transition={{ duration: 0.5 }}
->
-  <div style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '5px' }}>
-    LIVE BTC PRICE
-  </div>
-  {btcPrice ? (
-    <motion.div
-      key={btcPrice.timestamp}
-      animate={{ scale: [1, 1.02, 1] }}
-      transition={{ duration: 0.3 }}
-      style={{
-        fontSize: '1.8rem',
-        fontWeight: 'bold',
-        color: 'var(--neon-cyan)',
-        textShadow: '0 0 10px rgba(0, 255, 187, 0.8)'
-      }}
-    >
-      ${btcPrice.price.toFixed(2)}
-    </motion.div>
-  ) : (
-    <div className="loading-spinner" style={{ width: '30px', height: '30px' }} />
-  )}
-  <div style={{ 
-    fontSize: '0.7rem', 
-    opacity: 0.6, 
-    marginTop: '5px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '5px'
-  }}>
-    <span style={{
-      width: '8px',
-      height: '8px',
-      borderRadius: '50%',
-      background: 'var(--neon-cyan)',
-      display: 'inline-block',
-      animation: 'pulse 1s infinite'
-    }} />
-    Updating every 250ms
-  </div>
-</motion.div>
+            {/* Transaction Status Debug Info */}
+            {isCreatingBet && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={{
+                  padding: '10px',
+                  marginBottom: '20px',
+                  borderRadius: '8px',
+                  background: 'rgba(0, 255, 187, 0.1)',
+                  border: '1px solid var(--neon-cyan)',
+                  color: 'var(--neon-cyan)',
+                  textAlign: 'center',
+                  fontSize: '0.9rem'
+                }}
+              >
+                🔄 Transaction in progress... Please do not close this page or click again.
+              </motion.div>
+            )}
+
+
             
             {/* Current BTC Price */}
             {btcPrice && (
@@ -1915,7 +2695,7 @@ console.log('📤 Sending bet data to backend:', betData);
   transition={{ duration: 2, repeat: Infinity }}
   >
     <div style={{ fontSize: '1rem', opacity: 0.9, marginBottom: '10px', fontWeight: 'bold' }}>
-      🔒 This price will be locked when you confirm
+      This price will be locked when you confirm
     </div>
     <motion.div 
       className="price-text" 
@@ -2014,9 +2794,9 @@ console.log('📤 Sending bet data to backend:', betData);
       }}
       transition={{ duration: 2, repeat: Infinity }}
     >
-      <div style={{ fontSize: '1rem', opacity: 0.9, marginBottom: '10px' }}>
-        🔒 PRICE WILL BE LOCKED AT
-      </div>
+                  <div style={{ fontSize: '1rem', opacity: 0.9, marginBottom: '10px' }}>
+              PRICE WILL BE LOCKED AT
+            </div>
       <div style={{ 
         fontSize: '2.8rem', 
         fontWeight: 'bold',
@@ -2067,7 +2847,7 @@ console.log('📤 Sending bet data to backend:', betData);
                 border: '1px solid rgba(255, 204, 0, 0.3)'
               }}>
                 <div style={{ fontSize: '0.9rem', marginBottom: '5px' }}>
-                  ⚡ Potential Win (minus {houseFee}% fee)
+                  Potential Win (minus {houseFee}% fee)
                 </div>
                 <div className="neon-text-gold" style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
                   {(parseFloat(betAmount) * 2 * (1 - houseFee / 100)).toFixed(2)} {selectedToken}
@@ -2085,6 +2865,33 @@ console.log('📤 Sending bet data to backend:', betData);
             </div>
             
             <div style={{ display: 'flex', gap: '15px' }}>
+              {/* Transaction Status Indicator */}
+              {isCreatingBet && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  style={{
+                    position: 'absolute',
+                    top: '-60px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: 'rgba(0, 255, 187, 0.1)',
+                    border: '2px solid var(--neon-cyan)',
+                    borderRadius: '8px',
+                    padding: '10px 20px',
+                    textAlign: 'center',
+                    zIndex: 10
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="loading-spinner" style={{ width: '16px', height: '16px', margin: 0 }} />
+                    <span style={{ color: 'var(--neon-cyan)', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                      Processing Transaction... Please wait
+                    </span>
+                  </div>
+                </motion.div>
+              )}
+              
               <motion.button
                 className="neon-button"
                 onClick={handleCancelConfirmation}
@@ -2226,7 +3033,7 @@ useEffect(() => {
   
   // Listen for balance updates as a backup signal
   socket.on('balance:updated', (data) => {
-    console.log('💰 Balance updated:', data);
+                    console.log('Balance updated:', data);
     if (gamePhase === 'PLAYING') {
       console.log('Balance updated while game in progress - checking completion');
       // This might indicate game completed
@@ -2895,7 +3702,7 @@ if (currentStatus === 'IN_PROGRESS' && currentStatus !== 'COMPLETED' && currentS
           </div>
           
           <div style={{ marginTop: '20px', fontSize: '0.9rem', opacity: 0.7 }}>
-            💰 Real blockchain transfer in progress...
+                            Real blockchain transfer in progress...
           </div>
         </motion.div>
       )}
@@ -3118,7 +3925,7 @@ if (currentStatus === 'IN_PROGRESS' && currentStatus !== 'COMPLETED' && currentS
         transform: 'translate(-50%, -50%)',
         fontSize: '2.5rem'
       }}>
-        🎲
+                        GAME
       </div>
     </div>
     
@@ -3164,7 +3971,7 @@ if (currentStatus === 'IN_PROGRESS' && currentStatus !== 'COMPLETED' && currentS
       {gameResult.houseInsufficientBalance ? (
         <>
           <h1 className="neon-text-gold" style={{ fontSize: '2.5rem', marginBottom: '20px' }}>
-            ⚠️ SOMETHING WENT WRONG ⚠️
+                            SOMETHING WENT WRONG
           </h1>
           <div style={{ 
             fontSize: '1.2rem', 
@@ -3188,7 +3995,7 @@ if (currentStatus === 'IN_PROGRESS' && currentStatus !== 'COMPLETED' && currentS
       ) : gameResult.result === 'WIN' ? (
         <>
           <h1 className="neon-text-cyan" style={{ fontSize: '3rem', marginBottom: '20px' }}>
-            🎉 YOU WON! 🎉
+                            YOU WON!
           </h1>
           <div style={{ fontSize: '1.2rem', marginBottom: '10px' }}>
             Congratulations! Your prediction was correct.
@@ -3237,7 +4044,7 @@ if (currentStatus === 'IN_PROGRESS' && currentStatus !== 'COMPLETED' && currentS
           <div style={{ fontSize: '0.95rem' }}>
             {gameResult.winner === bet?.userId ? (
               <div style={{ color: 'var(--neon-cyan)' }}>
-                ✅ <strong>You</strong> defeated{' '}
+                <strong>You</strong> defeated{' '}
                 {gameResult.loser === 'HOUSE_BOT' ? (
                   <span style={{ color: 'var(--neon-pink)' }}>the House Bot</span>
                 ) : (
@@ -3246,7 +4053,7 @@ if (currentStatus === 'IN_PROGRESS' && currentStatus !== 'COMPLETED' && currentS
               </div>
             ) : gameResult.loser === bet?.userId ? (
               <div style={{ color: 'var(--neon-pink)' }}>
-                ❌ <strong>You</strong> lost to{' '}
+                <strong>You</strong> lost to{' '}
                 {gameResult.winner === 'HOUSE_BOT' ? (
                   <span style={{ color: 'var(--neon-cyan)' }}>the House Bot</span>
                 ) : (
@@ -3289,7 +4096,7 @@ if (currentStatus === 'IN_PROGRESS' && currentStatus !== 'COMPLETED' && currentS
         {gameResult.payoutTransferSignature && (
           <div style={{ marginBottom: '10px' }}>
             <div style={{ fontSize: '0.9rem', opacity: 0.8, marginBottom: '5px' }}>
-              💰 Payout Transaction:
+                              Payout Transaction:
             </div>
             <div style={{ 
               fontSize: '0.75rem', 
@@ -3347,7 +4154,7 @@ if (currentStatus === 'IN_PROGRESS' && currentStatus !== 'COMPLETED' && currentS
                              'var(--neon-gold)'}`
       }}
     >
-      <div style={{ fontSize: '1.1rem', marginBottom: '15px' }}>💰 Balance Change Summary</div>
+                      <div style={{ fontSize: '1.1rem', marginBottom: '15px' }}>Balance Change Summary</div>
       
       <div style={{ 
         display: 'grid', 
@@ -3523,9 +4330,9 @@ if (currentStatus === 'IN_PROGRESS' && currentStatus !== 'COMPLETED' && currentS
                    gameResult.result === 'LOSS' ? '#ff0000' : 
                    'var(--neon-gold)'
           }}>
-            {gameResult.result === 'WIN' ? '✅ CORRECT!' : 
-             gameResult.result === 'LOSS' ? '❌ INCORRECT' : 
-             '🤝 DRAW'}
+                            {gameResult.result === 'WIN' ? 'CORRECT!' :
+                 gameResult.result === 'LOSS' ? 'INCORRECT' :
+                 'DRAW'}
           </div>
         </div>
       </div>
@@ -3761,7 +4568,7 @@ const HomeScreen = () => {
               }}
             >
               <h2 style={{ color: 'var(--text-primary)', marginBottom: '15px' }}>
-                ⚡ LIVE BTC PRICE
+                                  LIVE BTC PRICE
               </h2>
               <motion.div 
                 className="price-text btc-price-large"
@@ -3876,7 +4683,7 @@ const HomeScreen = () => {
             whileHover={{ scale: 1.02, y: -5 }}
             transition={{ type: 'spring', stiffness: 300 }}
           >
-            <h3 className="neon-text-purple">⚡ REAL-TIME PRICE FEEDS</h3>
+            <h3 className="neon-text-purple">REAL-TIME PRICE FEEDS</h3>
             <p>
               Lightning-fast BTC price updates with 250ms refresh rate from 
               institutional-grade price oracles.
@@ -3888,7 +4695,7 @@ const HomeScreen = () => {
             whileHover={{ scale: 1.02, y: -5 }}
             transition={{ type: 'spring', stiffness: 300 }}
           >
-            <h3 className="neon-text-pink">🔒 INSTANT PRICE LOCKING</h3>
+            <h3 className="neon-text-pink">INSTANT PRICE LOCKING</h3>
             <p>
               Revolutionary price locking technology captures exact BTC prices
               at prediction start for fair, transparent results.
@@ -3900,7 +4707,7 @@ const HomeScreen = () => {
             whileHover={{ scale: 1.02, y: -5 }}
             transition={{ type: 'spring', stiffness: 300 }}
           >
-            <h3 className="neon-text">💎 MULTI-TOKEN SUPPORT</h3>
+            <h3 className="neon-text">MULTI-TOKEN SUPPORT</h3>
             <p>
               Connect your wallet and manage multiple tokens including
               BeTyche, SOL, ETH, and RADBRO and many more  with seamless blockchain integration.
@@ -3915,7 +4722,7 @@ const HomeScreen = () => {
           <h3 className="neon-text" style={{ marginBottom: '20px' }}>💎 SUPPORTED TOKENS</h3>
           <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
             <motion.a 
-              href="https://dexscreener.com/solana/3NmCUUtLkrCb5LaHtZjYApX21L6w6WnrQojNgSR9i2KP"
+              href="https://moon.it/tokens/EydjnYHVeCQGihcvA22vBDCxn5HzBrXoQpP98kL9Koyp"
               target="_blank"
               rel="noopener noreferrer"
               className="neon-button neon-button-cyan"
@@ -3926,7 +4733,7 @@ const HomeScreen = () => {
               BeTyche on DEXScreener
             </motion.a>
             <motion.a 
-              href="https://dexscreener.com/solana/GCAc7Rvcy4xbPXskHCsuhskLLE3R1C41CYufMFHVU5Pv"
+              href="https://moon.it/tokens/287XY2FcGAE5ty4PZVjg22eqx37sEmzP8jPK3GxFofqB"
               target="_blank"
               rel="noopener noreferrer"
               className="neon-button neon-button-pink"
@@ -3962,7 +4769,7 @@ const HomeScreen = () => {
               {
                 step: '3',
                 title: 'Predict. Play. Profit.',
-                description:'Choose a token. Pick UP or DOWN. Lock your prediction for 10–60 seconds — your price is locked the instant you place your bet. If you’re right, you win and profit instantly',
+                description: 'Choose a token. Pick UP or DOWN. Lock your prediction for 10–60 seconds — your price is locked the instant you place your bet. If you\'re right, you win and profit instantly',
                 color: 'pink'
               },
               // {
@@ -4413,39 +5220,45 @@ function App() {
   
   return (
     <WalletConfig>
-      <AppContextProvider>
-        <AnimatePresence mode="wait">
-          {loading ? (
-            <SplashScreen key="splash" />
-          ) : (
-            <motion.div 
-              key="app"
-              className="app-container"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5 }}
-            >
-              {toast.visible && (
-                <Toast message={toast.message} type={toast.type} onClose={handleCloseToast} />
-              )}
-              <Header />
-              <main className="main-container">
-                <Routes>
-                  <Route path="/" element={<HomeScreen />} />
-                  <Route path="/wallet" element={<WalletScreen />} />
-                  <Route path="/game/setup" element={<GameSetupScreen showToast={showToast} />} />
-                  <Route path="/game/play" element={<GamePlayScreen />} />
-                  <Route path="/admin" element={<AdminDashboard />} />
-                  <Route path="/user-referal-dashboard" element={<ReferallDashboard />} />
-                   <Route path="/ambassador" element={<Ambassador />} />
-                   <Route path="/pulse-auth" element={<PulseAccount />} />
-                </Routes>
-              </main>
-              <Footer />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </AppContextProvider>
+      <TOSProvider>
+        <AppContextProvider>
+          <AnimatePresence mode="wait">
+            {loading ? (
+              <SplashScreen key="splash" />
+            ) : (
+              <motion.div 
+                key="app"
+                className="app-container"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5 }}
+              >
+                {toast.visible && (
+                  <Toast message={toast.message} type={toast.type} onClose={handleCloseToast} />
+                )}
+                <Header />
+                <main className="main-container">
+                  <Routes>
+                    <Route path="/" element={<HomeScreen />} />
+                    <Route path="/wallet" element={<WalletScreen />} />
+                    <Route path="/game/setup" element={<GameSetupScreen showToast={showToast} />} />
+                    <Route path="/game/play" element={<GamePlayScreen />} />
+                    <Route path="/admin" element={<AdminDashboard />} />
+                    <Route path="/admin/account-overview" element={<AccountOverview />} />
+                    <Route path="/user-referal-dashboard" element={<ReferallDashboard />} />
+                    <Route path="/ambassador" element={<Ambassador />} />
+                    <Route path="/pulse-auth" element={<PulseAccount />} />
+                    <Route path="/pulse-dashboard" element={<PulseDashboard />} />
+                  </Routes>
+                </main>
+                <Footer />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          {/* Terms of Service Modal - appears when TOS not accepted */}
+          <TermsOfServiceModal />
+        </AppContextProvider>
+      </TOSProvider>
     </WalletConfig>
   );
 }
