@@ -5,20 +5,11 @@ import { SolanaAdapter } from '@reown/appkit-adapter-solana/react'
 import { solana, solanaTestnet, solanaDevnet } from '@reown/appkit/networks'
 
 // Your Project ID is correct
-const projectId = '089c16e7988ade6be6f2c8ba9531a604'
+const projectId = '7dc01e78075138f0fcffac68cb30d471'
 
-// Create Solana adapter with explicit wallet support
+// Create Solana adapter
 const solanaAdapter = new SolanaAdapter({
-  wallets: [
-    'phantom',      // ✅ Phantom wallet
-    'trust',        // ✅ Trust Wallet
-    'solflare',     // ✅ Solflare wallet
-    'backpack',     // ✅ Backpack wallet
-    'brave',        // ✅ Brave wallet
-    'coinbase',     // ✅ Coinbase wallet
-    'exodus',       // ✅ Exodus wallet
-    'slope'         // ✅ Slope wallet
-  ]
+  wallets: []
 })
 
 // Create the AppKit instance
@@ -30,16 +21,10 @@ const appKit = createAppKit({
   metadata: {
     name: 'Pulse',
     description: 'Crypto Micro Prediction Game',
-    url: 'https://pulse-rho-eight.vercel.app/',
+    // url: 'https://flourishing-tartufo-9040fe.netlify.app',
+    
     icons: ['https://assets.reown.com/reown-profile-pic.png']
   },
-  // ✅ Add featured wallet IDs for better wallet discovery
-  featuredWalletIds: [
-    "4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0", // Trust Wallet
-    "c57ca95b47569778a0d41b3c8c1c3cc49df841794d91ae7954ffc1616122b8a9", // Phantom
-    "19177a48252d4de3f744b0d6c06b4a0f5c76f2ca2f2b8a0f5c76f2ca2f2b8a0", // Solflare
-    "4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0", // Backpack
-  ],
   themeMode: 'dark',
   themeVariables: {
     '--w3m-accent': '#00F2FF',

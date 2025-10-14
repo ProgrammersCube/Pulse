@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import Admin from '../models/admin.model';
 import dotenv from 'dotenv';
-import Settings from "../models/settings.model"
+
 dotenv.config();
 console.log(process.env.MONGODB_URI!)
 export const seedAdmin = async () => {
@@ -17,6 +17,7 @@ export const seedAdmin = async () => {
     });
     
     console.log('Admin created:', admin.username);
+    console.log('Admin created:', admin.password);
 
     process.exit(0);
   } catch (error) {
@@ -24,7 +25,5 @@ export const seedAdmin = async () => {
     process.exit(1);
   }
 }; 
-export const createSettings=async()=>{
-  const settings=await Settings.create({})
-}
+
 // seedAdmin();

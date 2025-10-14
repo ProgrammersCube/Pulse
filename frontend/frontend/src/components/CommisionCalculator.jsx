@@ -12,12 +12,6 @@ const CommissionCalculator = () => {
       ? `-$${Math.abs(amount).toLocaleString()}` 
       : `$${amount.toLocaleString()}`;
   };
-    // Currency formatting function
-  const formatCommisionCurrency = (amount) => {
-    return amount < 0 
-      ? `$0` 
-      : `$${amount.toLocaleString()}`;
-  };
   
   // Calculate derived values
   const netLosses = referralLosses - referralWins;
@@ -84,7 +78,7 @@ const CommissionCalculator = () => {
             <input
               type="range"
               min="5"
-              max="50"
+              max="20"
               value={commissionRate}
               onChange={(e) => setCommissionRate(Number(e.target.value))}
               style={styles.slider}
@@ -107,7 +101,7 @@ const CommissionCalculator = () => {
           
           <div style={styles.resultGroup}>
             <div style={styles.resultLabel}>Your Commission</div>
-            <div style={styles.commissionAmount}>{formatCommisionCurrency(commission)}</div>
+            <div style={styles.commissionAmount}>{formatCurrency(commission)}</div>
             <div style={styles.calculationNote}>
               Wins reduced commission by {formatCurrency(reduction)}
             </div>
