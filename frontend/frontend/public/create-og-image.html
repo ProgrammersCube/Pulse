@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            width: 1200px;
+            height: 630px;
+            background: linear-gradient(135deg, #000000 0%, #1a1a2e 50%, #16213e 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Orbitron', monospace;
+            color: #00F2FF;
+            text-align: center;
+        }
+        
+        .logo {
+            font-size: 120px;
+            font-weight: 900;
+            text-shadow: 0 0 30px #00F2FF, 0 0 60px #00F2FF;
+            margin-bottom: 30px;
+            letter-spacing: 10px;
+        }
+        
+        .tagline {
+            font-size: 36px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+        }
+        
+        .description {
+            font-size: 24px;
+            color: #a0a0a0;
+            max-width: 800px;
+            line-height: 1.4;
+        }
+        
+        .crypto-icons {
+            display: flex;
+            gap: 30px;
+            margin-top: 40px;
+        }
+        
+        .icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            border: 2px solid;
+        }
+        
+        .sol { border-color: #9945FF; background: rgba(153, 69, 255, 0.1); }
+        .btc { border-color: #F7931A; background: rgba(247, 147, 26, 0.1); }
+        .eth { border-color: #627EEA; background: rgba(98, 126, 234, 0.1); }
+        
+        .glow {
+            box-shadow: 0 0 20px currentColor;
+        }
+    </style>
+</head>
+<body>
+    <div class="logo">PULSE</div>
+    <div class="tagline">Crypto Micro Prediction Game</div>
+    <div class="description">
+        Predict Bitcoin price movements in real-time and win tokens.<br>
+        Fast, fun, and fair gaming on Solana blockchain.
+    </div>
+    <div class="crypto-icons">
+        <div class="icon sol glow" style="color: #9945FF;">S</div>
+        <div class="icon btc glow" style="color: #F7931A;">₿</div>
+        <div class="icon eth glow" style="color: #627EEA;">Ξ</div>
+    </div>
+</body>
+</html>
