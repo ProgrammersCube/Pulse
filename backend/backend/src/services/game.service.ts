@@ -131,9 +131,7 @@ async createBet(request: CreateBetRequest): Promise<IBet> {
   const houseWalletAddress = await this.getHouseWalletAddress();
   
   // Check ALL token balances
-  // TODO: Remove this after testing
-  const tokens = ['SOL'];
-  // const tokens = ['BeTyche', 'SOL', 'RADBRO'];
+  const tokens = ['BeTyche', 'SOL', 'RADBRO'];
   const insufficientTokens: string[] = [];
   let balanceReport = '📊 HOUSE BALANCE REPORT:\n\n';
   

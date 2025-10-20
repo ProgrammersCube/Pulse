@@ -81,8 +81,7 @@ export const checkSystemStatus = async (req: Request, res: Response): Promise<vo
     const houseWalletAddress = await getHouseWalletAddress();
     
     // Check house balances
-    // const tokens = ['BeTyche', 'SOL', 'RADBRO'];
-    const tokens = ['SOL'];
+    const tokens = ['BeTyche', 'SOL', 'RADBRO'];
     const balances: any = {};
     let canBet = true;
     
