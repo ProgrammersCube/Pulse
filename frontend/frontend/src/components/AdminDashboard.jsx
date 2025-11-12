@@ -9,12 +9,11 @@ import {
   AlertCircle, ChevronDown, ChevronUp, Eye, EyeOff,
   Zap, Shield, Database, Globe, BarChart3, PieChart,
   Wallet, ArrowUpRight, ArrowDownRight, Clock,ArrowUp,ArrowDown,Edit3,X,Trash2,
-  User, MoreVertical, Key
+  User, MoreVertical, Key, Star, Plus
 } from 'lucide-react';
 import { styles } from '../styles/Admin-dashbaord.styles.js';
 // const API_URL = process.env.REACT_APP_API_URL || 'https://creative-communication-production.up.railway.app';
-const API_URL = process.env.REACT_APP_API_URL
-console.log(API_URL)
+const API_URL = process.env.REACT_APP_API_URL;
 // Chart component for revenue visualization
 const MiniChart = ({ data, color }) => {
   const max = Math.max(...data);
@@ -82,6 +81,13 @@ const AdminDashboard = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [newTokenName, setNewTokenName] = useState('');
+  const [newTokenPythId, setNewTokenPythId] = useState('');
+  const [showAddTokenForm, setShowAddTokenForm] = useState(false);
+  const [verifyingToken, setVerifyingToken] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [verifiedTokenData, setVerifiedTokenData] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [expandedAmbassador, setExpandedAmbassador] = useState(null);
   const [copiedCode, setCopiedCode] = useState('');
   const [focusedInput, setFocusedInput] = useState('');
@@ -135,6 +141,11 @@ const AdminDashboard = () => {
   const [netRevenueLoading, setNetRevenueLoading] = useState(false);
   const [selectedRevenueTimePeriod, setSelectedRevenueTimePeriod] = useState('ALL');
 
+  // Prediction Token Stats State
+  const [predictionTokenStats, setPredictionTokenStats] = useState(null);
+  const [predictionTokenStatsLoading, setPredictionTokenStatsLoading] = useState(false);
+  const [selectedTokenStatsTimePeriod, setSelectedTokenStatsTimePeriod] = useState('ALL');
+
   // Add animations
   useEffect(() => {
     const style = document.createElement('style');
@@ -143,6 +154,10 @@ const AdminDashboard = () => {
       ${styles.floatAnimation}
       ${styles.pulseAnimation}
       ${styles.glowAnimation}
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
       
       .admin-scrollbar::-webkit-scrollbar {
         width: 8px;
@@ -229,6 +244,13 @@ const AdminDashboard = () => {
     }
   }, [activeTab, token]);
 
+  // Fetch prediction token stats when useranalytics tab is active
+  useEffect(() => {
+    if (activeTab === 'useranalytics' && token && !predictionTokenStats) {
+      fetchPredictionTokenStats(selectedTokenStatsTimePeriod);
+    }
+  }, [activeTab, token]);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -256,6 +278,18 @@ const AdminDashboard = () => {
       fetchUserAnalytics(userAnalyticsFilter);
     }
   }, [activeTab, token, userAnalyticsFilter]);
+
+  // Handle window resize for responsive design
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    handleResize(); // Initial check
+    
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const fetchData = async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true);
@@ -760,6 +794,27 @@ const AdminDashboard = () => {
   const handleRevenueTimePeriodChange = (period) => {
     setSelectedRevenueTimePeriod(period);
     fetchNetRevenueAnalytics(period);
+  };
+
+  // Fetch prediction token stats
+  const fetchPredictionTokenStats = async (timePeriod = 'ALL') => {
+    setPredictionTokenStatsLoading(true);
+    try {
+      const response = await adminApi.get(`/dashboard/prediction-token-stats?timePeriod=${timePeriod}`);
+      setPredictionTokenStats(response.data.data);
+    } catch (error) {
+      console.error('Error fetching prediction token stats:', error);
+      setError('Failed to fetch prediction token stats');
+      setTimeout(() => setError(''), 3000);
+    } finally {
+      setPredictionTokenStatsLoading(false);
+    }
+  };
+
+  // Handle token stats time period change
+  const handleTokenStatsTimePeriodChange = (period) => {
+    setSelectedTokenStatsTimePeriod(period);
+    fetchPredictionTokenStats(period);
   };
 
   // Format number with commas
@@ -2012,6 +2067,89 @@ const AdminDashboard = () => {
                   </div>
                 )}
               </div>
+
+              {/* Prediction Token Stats Section */}
+              <div style={styles.card}>
+                <div style={styles.cardHeader}>
+                  <BarChart3 size={24} color="#00ff88" />
+                  <h3 style={styles.cardTitle}>Prediction Token Stats</h3>
+                </div>
+                
+                {/* Time Period Selector */}
+                <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {['ALL', '1D', '1W', '1M'].map((period) => (
+                    <button
+                      key={period}
+                      onClick={() => handleTokenStatsTimePeriodChange(period)}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        background: selectedTokenStatsTimePeriod === period ? '#00ff88' : 'rgba(255, 255, 255, 0.1)',
+                        color: selectedTokenStatsTimePeriod === period ? '#000' : '#fff',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '0.5rem',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        fontWeight: '500',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      {period === 'ALL' ? 'All Time' : period}
+                    </button>
+                  ))}
+                </div>
+
+                {predictionTokenStatsLoading ? (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite' }} />
+                    <p style={{ marginTop: '1rem' }}>Loading token stats...</p>
+                  </div>
+                ) : predictionTokenStats && predictionTokenStats.tokenStats && predictionTokenStats.tokenStats.length > 0 ? (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', color: '#fff', fontSize: '0.9rem' }}>
+                      <thead>
+                        <tr style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
+                          <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Token</th>
+                          <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Volume</th>
+                          <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Total Bets</th>
+                          <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Wins</th>
+                          <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Losses</th>
+                          <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>Win Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {predictionTokenStats.tokenStats.map((token, index) => (
+                          <tr key={token.predictionToken} style={{
+                            background: index % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent'
+                          }}>
+                            <td style={{ padding: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                              <div style={{ fontWeight: '500', fontSize: '1rem' }}>{token.predictionToken}</div>
+                            </td>
+                            <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: '#00ff88' }}>
+                              ${formatNumber(token.totalVolume)}
+                            </td>
+                            <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                              {formatNumber(token.totalBets)}
+                            </td>
+                            <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: '#00ff88' }}>
+                              {formatNumber(token.winCount)}
+                            </td>
+                            <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: '#ff4444' }}>
+                              {formatNumber(token.lossCount)}
+                            </td>
+                            <td style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                              {token.winRate?.toFixed(1)}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#fff' }}>
+                    <p>No prediction token stats available</p>
+                  </div>
+                )}
+              </div>
             </motion.div>
           )}
 
@@ -2051,7 +2189,7 @@ const AdminDashboard = () => {
                   }}>
                     <Wallet size={20} color="white" />
                   </div>
-                  Token Configuration
+                  Bet Token Configuration
                 </h3>
                 
                 <div style={{
@@ -2111,6 +2249,435 @@ const AdminDashboard = () => {
                     </motion.label>
                   ))}
                 </div>
+              </motion.div>
+
+              {/* Prediction Tokens Configuration */}
+              <motion.div 
+                style={styles.card}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.01 }}
+                className="hover-lift"
+              >
+                <div style={styles.cardGlow} />
+                
+                <h3 style={{
+                  fontSize: '1.5rem',
+                  fontWeight: 'bold',
+                  marginBottom: '2rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem'
+                }}>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <TrendingUp size={20} color="white" />
+                  </div>
+                  Prediction Tokens Configuration
+                </h3>
+                
+                {/* Add Token Section - Collapsible */}
+                <motion.div
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '2px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '16px',
+                    marginBottom: '1.5rem',
+                    overflow: 'hidden'
+                  }}
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  {/* Toggle Header */}
+                  <motion.button
+                    onClick={() => setShowAddTokenForm(!showAddTokenForm)}
+                    style={{
+                      width: '100%',
+                      padding: '1rem 1.5rem',
+                      background: 'transparent',
+                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                      color: 'white'
+                    }}
+                    whileHover={{ background: 'rgba(255, 255, 255, 0.05)' }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <h4 style={{ 
+                      fontSize: '1rem',
+                      fontWeight: '600',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      margin: 0
+                    }}>
+                      <Plus size={18} />
+                      Add New Token
+                    </h4>
+                    <motion.div
+                      animate={{ rotate: showAddTokenForm ? 180 : 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <ChevronDown size={20} />
+                    </motion.div>
+                  </motion.button>
+                  
+                  {/* Collapsible Form */}
+                  <AnimatePresence>
+                    {showAddTokenForm && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        style={{ overflow: 'hidden' }}
+                      >
+                        <div style={{ padding: '0 1.5rem 1.5rem 1.5rem' }}>
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: isMobile ? '1fr' : '1fr 2fr auto',
+                            gap: '1rem',
+                            alignItems: 'end'
+                          }}>
+                            <div>
+                              <label style={{
+                                display: 'block',
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                fontSize: '0.875rem',
+                                marginBottom: '0.5rem',
+                                fontWeight: '500'
+                              }}>
+                                Token Symbol *
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g., SOL, DOGE"
+                                value={newTokenName}
+                                onChange={(e) => setNewTokenName(e.target.value.toUpperCase())}
+                                style={{
+                                  width: '100%',
+                                  padding: '0.75rem',
+                                  background: 'rgba(255, 255, 255, 0.05)',
+                                  border: '2px solid rgba(255, 255, 255, 0.1)',
+                                  borderRadius: '8px',
+                                  color: 'white',
+                                  fontSize: '0.95rem',
+                                  outline: 'none',
+                                  transition: 'all 0.2s ease',
+                                  boxSizing: 'border-box'
+                                }}
+                                onFocus={(e) => e.target.style.borderColor = 'rgba(34, 197, 94, 0.5)'}
+                                onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
+                              />
+                            </div>
+                            <div>
+                              <label style={{
+                                display: 'block',
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                fontSize: '0.875rem',
+                                marginBottom: '0.5rem',
+                                fontWeight: '500'
+                              }}>
+                                Pyth Feed ID
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g 0xe62df6c8b4a85fe1a6.....7ac66b72dc658afedf0f4a415b43 for BTC"
+                                value={newTokenPythId}
+                                onChange={(e) => setNewTokenPythId(e.target.value)}
+                                style={{
+                                  width: '100%',
+                                  padding: '0.75rem',
+                                  background: 'rgba(255, 255, 255, 0.05)',
+                                  border: '2px solid rgba(255, 255, 255, 0.1)',
+                                  borderRadius: '8px',
+                                  color: 'white',
+                                  fontSize: '0.875rem',
+                                  outline: 'none',
+                                  transition: 'all 0.2s ease',
+                                  fontFamily: 'monospace',
+                                  boxSizing: 'border-box'
+                                }}
+                                onFocus={(e) => e.target.style.borderColor = 'rgba(34, 197, 94, 0.5)'}
+                                onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
+                              />
+                            </div>
+                            <motion.button
+                              onClick={async () => {
+                                if (!newTokenName.trim()) {
+                                  setError('Token symbol is required');
+                                  setTimeout(() => setError(''), 3000);
+                                  return;
+                                }
+                                
+                                if (!newTokenPythId.trim()) {
+                                  setError('Pyth Feed ID is required for verification');
+                                  setTimeout(() => setError(''), 3000);
+                                  return;
+                                }
+                                
+                                // Check if token already exists
+                                const tokenExists = settings.predictionTokens?.some(
+                                  t => t.name.toUpperCase() === newTokenName.toUpperCase()
+                                );
+                                
+                                if (tokenExists) {
+                                  setError(`${newTokenName} already exists`);
+                                  setTimeout(() => setError(''), 3000);
+                                  return;
+                                }
+                                
+                                // Verify token with Pyth Network
+                                setVerifyingToken(true);
+                                setError('');
+                                setSuccess('');
+                                
+                                try {
+                                  const response = await axios.post(`${API_URL}api/price/verify`, {
+                                    symbol: newTokenName.trim(),
+                                    pythFeedId: newTokenPythId.trim()
+                                  });
+                                  
+                                  if (response.data.success && response.data.valid) {
+                                    // Token verified successfully, show modal with details
+                                    setVerifiedTokenData(response.data.data);
+                                    setShowVerificationModal(true);
+                                  } else {
+                                    setError(response.data.message || 'Token verification failed');
+                                    setTimeout(() => setError(''), 5000);
+                                  }
+                                } catch (error) {
+                                  console.error('Error verifying token:', error);
+                                  const errorMessage = error?.response?.data?.message || error?.message || 'Failed to verify token. Please check your connection and try again.';
+                                  setError(errorMessage);
+                                  setTimeout(() => setError(''), 5000);
+                                } finally {
+                                  setVerifyingToken(false);
+                                }
+                              }}
+                              disabled={verifyingToken}
+                              style={{
+                                padding: '0.75rem 1.5rem',
+                                background: verifyingToken 
+                                  ? 'linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)'
+                                  : 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
+                                border: 'none',
+                                borderRadius: '8px',
+                                color: 'white',
+                                fontWeight: '600',
+                                cursor: verifyingToken ? 'not-allowed' : 'pointer',
+                                fontSize: '0.95rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.5rem',
+                                transition: 'all 0.2s ease',
+                                whiteSpace: 'nowrap',
+                                width: isMobile ? '100%' : 'auto',
+                                height: 'fit-content',
+                                opacity: verifyingToken ? 0.7 : 1
+                              }}
+                              whileHover={verifyingToken ? {} : { scale: 1.05 }}
+                              whileTap={verifyingToken ? {} : { scale: 0.95 }}
+                            >
+                              {verifyingToken ? (
+                                <>
+                                  <RefreshCw size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                                  Verifying...
+                                </>
+                              ) : (
+                                <>
+                                  <Plus size={18} />
+                                  Verify Token
+                                </>
+                              )}
+                            </motion.button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+                
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '1rem',
+                  marginBottom: '2rem',
+                  '@media (max-width: 768px)': {
+                    gridTemplateColumns: '1fr',
+                    gap: '0.75rem'
+                  }
+                }}>
+                  {settings.predictionTokens && Array.isArray(settings.predictionTokens) && settings.predictionTokens.length > 0 ? (
+                    settings.predictionTokens.map((token) => {
+                      const isActive = token.active || false;
+                      
+                      return (
+                        <div
+                          key={token.name}
+                          style={{
+                            position: 'relative',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '1rem 1.25rem',
+                            borderRadius: '16px',
+                            border: '2px solid',
+                            transition: 'all 0.3s ease',
+                            background: isActive 
+                              ? 'rgba(34, 197, 94, 0.1)' 
+                              : 'rgba(255, 255, 255, 0.02)',
+                            borderColor: isActive 
+                              ? 'rgba(34, 197, 94, 0.3)' 
+                              : 'rgba(255, 255, 255, 0.1)'
+                          }}
+                        >
+                          {/* Make Default Button */}
+                          <motion.button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              
+                              // Check if token is active before allowing it to be set as default
+                              if (!token.active) {
+                                setError(`Please activate ${token.name} first before setting it as default`);
+                                setTimeout(() => setError(''), 3000);
+                                return;
+                              }
+                              
+                              const updatedTokens = settings.predictionTokens.map(t => 
+                                t.name === token.name 
+                                  ? { ...t, default: true }
+                                  : { ...t, default: false } // Set others to false (only one default)
+                              );
+                              
+                              updateSettings({
+                                predictionTokens: updatedTokens
+                              });
+                            }}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              cursor: token.active ? 'pointer' : 'not-allowed',
+                              padding: '4px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: '4px',
+                              transition: 'all 0.2s ease',
+                              opacity: token.active ? 1 : 0.5
+                            }}
+                            whileHover={token.active ? { scale: 1.1 } : {}}
+                            whileTap={token.active ? { scale: 0.9 } : {}}
+                            title={token.default ? 'Default token' : token.active ? 'Make default' : 'Activate token first'}
+                          >
+                            <Star 
+                              size={18} 
+                              color={token.default ? '#fbbf24' : token.active ? 'rgba(255, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.2)'}
+                              fill={token.default ? '#fbbf24' : 'none'}
+                            />
+                          </motion.button>
+                          
+                          <motion.label 
+                            style={{
+                              flex: 1,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              cursor: 'pointer',
+                              gap: '0.75rem'
+                            }}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                          >
+                            <span style={{ fontWeight: '600', fontSize: '1.1rem' }}>{token.name}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <input
+                                type="checkbox"
+                                checked={isActive}
+                                onChange={(e) => {
+                                  // Update only the specific token that was toggled
+                                  const updatedTokens = settings.predictionTokens.map(t => 
+                                    t.name === token.name 
+                                      ? { ...t, active: e.target.checked }
+                                      : t
+                                  );
+                                  
+                                  updateSettings({
+                                    predictionTokens: updatedTokens
+                                  });
+                                }}
+                                style={{ display: 'none' }}
+                              />
+                              <div style={{
+                                ...styles.toggle,
+                                background: isActive ? '#22c55e' : 'rgba(255, 255, 255, 0.1)'
+                              }}>
+                                <div style={{
+                                  ...styles.toggleThumb,
+                                  transform: isActive ? 'translateX(28px)' : 'translateX(0)'
+                                }} />
+                              </div>
+                              
+                              {/* Delete Button */}
+                              <motion.button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  
+                                  // Remove the token from the array
+                                  const updatedTokens = settings.predictionTokens.filter(t => 
+                                    t.name !== token.name
+                                  );
+                                  
+                                  updateSettings({
+                                    predictionTokens: updatedTokens
+                                  });
+                                  
+                                  setSuccess(`${token.name} removed successfully`);
+                                  setTimeout(() => setSuccess(''), 3000);
+                                }}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: '4px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  borderRadius: '4px',
+                                  transition: 'all 0.2s ease'
+                                }}
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                title={`Delete ${token.name}`}
+                              >
+                                <Trash2 
+                                  size={16} 
+                                  color="rgba(239, 68, 68, 0.7)"
+                                />
+                              </motion.button>
+                            </div>
+                          </motion.label>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div style={{ padding: '2rem', textAlign: 'center', color: 'rgba(255, 255, 255, 0.6)' }}>
+                      No prediction tokens configured
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+
                  {/* New Matchmaking System Toggle */}
     <motion.div 
       style={styles.card}
@@ -2806,18 +3373,28 @@ const AdminDashboard = () => {
       </motion.div>
     )}
     </AnimatePresence>
-                {/* Bet Limits */}
-                <h4 style={{
-                  fontSize: '1.25rem',
-                  fontWeight: '600',
-                  marginBottom: '1.5rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}>
-                  <Shield size={20} style={{ color: '#a855f7' }} />
-                  Bet Limits
-                </h4>
+    
+    {/* Bet Limits */}
+    <motion.div 
+      style={styles.card}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 }}
+      className="hover-lift"
+    >
+      <div style={styles.cardGlow} />
+      
+      <h4 style={{
+        fontSize: '1.25rem',
+        fontWeight: '600',
+        marginBottom: '1.5rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.5rem'
+      }}>
+        <Shield size={20} style={{ color: '#a855f7' }} />
+        Bet Limits
+      </h4>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                   {Object.keys(localBetLimits).map((token) => (
@@ -5778,6 +6355,313 @@ const AdminDashboard = () => {
           </motion.div>
         </motion.div>
       )}
+
+      {/* Token Verification Modal */}
+      <AnimatePresence>
+        {showVerificationModal && verifiedTokenData && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '1rem',
+              backdropFilter: 'blur(10px)'
+            }}
+            onClick={() => {
+              setShowVerificationModal(false);
+              setVerifiedTokenData(null);
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              style={{
+                background: 'linear-gradient(135deg, rgba(39, 23, 65, 0.95) 0%, rgba(20, 15, 35, 0.95) 100%)',
+                borderRadius: '20px',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                padding: '2rem',
+                maxWidth: '600px',
+                width: '100%',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
+                position: 'relative'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close button */}
+              <button
+                onClick={() => {
+                  setShowVerificationModal(false);
+                  setVerifiedTokenData(null);
+                }}
+                style={{
+                  position: 'absolute',
+                  top: '1rem',
+                  right: '1rem',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: 'white',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(255, 255, 255, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                }}
+              >
+                <X size={20} />
+              </button>
+
+              {/* Header */}
+              <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                <div style={{
+                  width: '80px',
+                  height: '80px',
+                  margin: '0 auto 1rem',
+                  background: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 0 30px rgba(16, 185, 129, 0.5)'
+                }}>
+                  <Check size={40} color="white" />
+                </div>
+                <h2 style={{
+                  fontSize: '1.75rem',
+                  fontWeight: 'bold',
+                  color: 'white',
+                  margin: '0 0 0.5rem 0',
+                  background: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent'
+                }}>
+                  Token Verified Successfully!
+                </h2>
+                <p style={{
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  fontSize: '0.95rem',
+                  margin: 0
+                }}>
+                  Token has been verified on Pyth Network
+                </p>
+              </div>
+
+              {/* Token Information */}
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '12px',
+                padding: '1.5rem',
+                marginBottom: '2rem',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {/* Symbol */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingBottom: '1rem',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem' }}>Symbol</span>
+                    <span style={{ color: 'white', fontSize: '1.25rem', fontWeight: 'bold' }}>
+                      {verifiedTokenData.symbol}
+                    </span>
+                  </div>
+
+                  {/* Price */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingBottom: '1rem',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem' }}>Current Price</span>
+                    <span style={{
+                      color: '#10b981',
+                      fontSize: '1.5rem',
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}>
+                      ${verifiedTokenData.price.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Confidence */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingBottom: '1rem',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem' }}>Confidence</span>
+                    <span style={{ color: 'white', fontSize: '1rem', fontWeight: '500' }}>
+                      ±${Math.abs(verifiedTokenData.confidence).toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Pyth Feed ID */}
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                    paddingBottom: '1rem',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem' }}>Pyth Feed ID</span>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      background: 'rgba(0, 0, 0, 0.3)',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      fontFamily: 'monospace',
+                      fontSize: '0.85rem',
+                      color: 'rgba(255, 255, 255, 0.8)',
+                      wordBreak: 'break-all'
+                    }}>
+                      {verifiedTokenData.pythFeedId}
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(verifiedTokenData.pythFeedId);
+                          setCopiedCode(verifiedTokenData.pythFeedId);
+                          setTimeout(() => setCopiedCode(''), 2000);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'rgba(255, 255, 255, 0.6)',
+                          cursor: 'pointer',
+                          padding: '0.25rem',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                        title="Copy Feed ID"
+                      >
+                        {copiedCode === verifiedTokenData.pythFeedId ? (
+                          <Check size={16} color="#10b981" />
+                        ) : (
+                          <Copy size={16} />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Timestamp */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem' }}>Last Updated</span>
+                    <span style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.85rem' }}>
+                      {new Date(verifiedTokenData.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{
+                display: 'flex',
+                gap: '1rem',
+                justifyContent: 'center'
+              }}>
+                <motion.button
+                  onClick={() => {
+                    setShowVerificationModal(false);
+                    setVerifiedTokenData(null);
+                  }}
+                  style={{
+                    background: 'rgba(108, 117, 125, 0.2)',
+                    border: '1px solid rgba(108, 117, 125, 0.3)',
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    padding: '0.75rem 2rem',
+                    borderRadius: '8px',
+                    fontSize: '0.95rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    flex: 1
+                  }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  Cancel
+                </motion.button>
+
+                <motion.button
+                  onClick={() => {
+                    // Add token to settings
+                    const tokenName = verifiedTokenData.symbol;
+                    const newToken = {
+                      name: tokenName,
+                      pythFeedId: verifiedTokenData.pythFeedId,
+                      default: false,
+                      active: false
+                    };
+                    
+                    const updatedTokens = [...(settings.predictionTokens || []), newToken];
+                    
+                    updateSettings({
+                      predictionTokens: updatedTokens
+                    });
+                    
+                    setNewTokenName('');
+                    setNewTokenPythId('');
+                    setShowAddTokenForm(false);
+                    setShowVerificationModal(false);
+                    setVerifiedTokenData(null);
+                    setSuccess(`${tokenName} added successfully!`);
+                    setTimeout(() => setSuccess(''), 5000);
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)',
+                    border: 'none',
+                    color: 'white',
+                    padding: '0.75rem 2rem',
+                    borderRadius: '8px',
+                    fontSize: '0.95rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    flex: 1,
+                    boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'
+                  }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  Add Token
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Payment Confirmation Modal */}
       <PaymentConfirmationModal

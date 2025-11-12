@@ -28,6 +28,7 @@ export interface IBet extends Document {
   direction: BetDirection;
   amount: number;
   token: string; // BeTyche, SOL, ETH, RADBRO
+  predictionToken: string;
   duration: number; // in seconds (5-60)
   lockedPrice: number;
   lockedAt: Date;
@@ -82,6 +83,10 @@ const betSchema = new Schema<IBet>({
     type: String,
     required: true,
     enum: ['BeTyche', 'SOL', 'ETH', 'RADBRO']
+  },
+  predictionToken: {
+    type: String,
+    required: true,
   },
   duration: {
     type: Number,

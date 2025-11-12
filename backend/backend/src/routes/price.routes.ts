@@ -3,7 +3,9 @@ import {
   getCurrentPrice, 
   getHistoricalPrices, 
   lockPrice, 
-  getLockedPrice 
+  getLockedPrice,
+  getTokenPriceByFeedId,
+  verifyPythToken
 } from '../controllers/price.controller';
 
 const router = express.Router();
@@ -20,10 +22,16 @@ router.get('/current', asyncHandler(getCurrentPrice));
 // Route to get historical prices
 router.get('/historical', asyncHandler(getHistoricalPrices));
 
+// Route to get token price by Pyth feed ID
+router.get('/token', asyncHandler(getTokenPriceByFeedId));
+
 // Route to lock a price for a bet
 router.post('/lock', asyncHandler(lockPrice));
 
 // Route to get a locked price
 router.get('/lock/:betId', asyncHandler(getLockedPrice));
+
+// Route to verify Pyth token feed ID
+router.post('/verify', asyncHandler(verifyPythToken));
 
 export default router;

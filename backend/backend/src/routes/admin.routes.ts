@@ -6,6 +6,7 @@ import {
   getDashboardStats,
   getPlayerNetProfitability,
   getNetRevenueAnalytics,
+  getPredictionTokenStats,
   createAmbassador,
   getAmbassadors,
   updateAmbassador,
@@ -70,6 +71,7 @@ router.get('/treasury/wallet-balances/:walletId', adminAuth, getWalletBalances);
 router.get('/dashboard/stats',adminAuth, getDashboardStats);
 router.get('/dashboard/player-profitability', adminAuth, getPlayerNetProfitability);
 router.get('/dashboard/net-revenue', adminAuth, getNetRevenueAnalytics);
+router.get('/dashboard/prediction-token-stats', adminAuth, getPredictionTokenStats);
 
 // Ambassadors
 router.post('/ambassadors', createAmbassador);

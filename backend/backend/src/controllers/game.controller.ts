@@ -15,7 +15,7 @@ const getHouseWalletAddress = async (): Promise<string> => {
 // Create a new bet
 export const createBet = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { userId, direction, amount, token, duration,transactionSignature } = req.body;
+    const { userId, direction, amount, token, predictionToken, duration, transactionSignature } = req.body;
     
     // Validate required fields
     if (!userId || !direction || !amount || !token || !duration) {
@@ -51,6 +51,7 @@ export const createBet = async (req: Request, res: Response): Promise<void> => {
         direction,
         amount,
         token,
+        predictionToken: predictionToken || 'BTC', // Default to BTC if not provided
         duration,
         transactionSignature
       });

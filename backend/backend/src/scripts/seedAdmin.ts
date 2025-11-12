@@ -25,6 +25,24 @@ export const seedAdmin = async () => {
   }
 }; 
 export const createSettings=async()=>{
-  const settings=await Settings.create({})
+  const defaultPredictionTokens = [
+    { name: 'BTC', default: false, active: false },
+    { name: 'ETH', default: false, active: false },
+    { name: 'SOL', default: false, active: false },
+    { name: 'DOGE', default: false, active: false },
+    { name: 'AVAX', default: false, active: false },
+    { name: 'LINK', default: false, active: false },
+    { name: 'XRP', default: false, active: false },
+    { name: 'MATIC', default: false, active: false },
+    { name: 'TON', default: false, active: false },
+    { name: 'BNB', default: false, active: false }
+  ];
+  
+  const settings = await Settings.create({
+    predictionTokens: defaultPredictionTokens
+  });
+  
+  console.log('Settings created with predictionTokens:', settings.predictionTokens);
+  return settings;
 }
 // seedAdmin();

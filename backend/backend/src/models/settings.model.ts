@@ -15,6 +15,14 @@ export interface ISettings extends Document {
     RADBRO: boolean;
   };
   
+  // Prediction Tokens Configuration
+  predictionTokens: Array<{
+    name: string;
+    pythFeedId?: string; // Pyth Network price feed ID/alias
+    default: boolean;
+    active: boolean;
+  }>;
+  
   // Referral Bonus Settings
   referralBonus: {
     enabled: boolean;
@@ -65,6 +73,34 @@ const settingsSchema = new Schema<ISettings>({
     SOL: { type: Boolean, default: true },
     ETH: { type: Boolean, default: false },
     RADBRO: { type: Boolean, default: true }
+  },
+  
+  predictionTokens: {
+    type: [
+      new Schema(
+        {
+          name: { type: String, required: true },
+          pythFeedId: { type: String, required: false },
+          default: { type: Boolean, default: false },
+          active: { type: Boolean, default: false }
+        },
+        { _id: false }
+      )
+    ],
+    default: function() {
+      return [
+        { name: 'BTC', pythFeedId: '0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43', default: false, active: false },
+        { name: 'ETH', pythFeedId: '0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace', default: false, active: false },
+        { name: 'SOL', default: false, active: false },
+        { name: 'DOGE', default: false, active: false },
+        { name: 'AVAX', default: false, active: false },
+        { name: 'LINK', default: false, active: false },
+        { name: 'XRP', default: false, active: false },
+        { name: 'MATIC', default: false, active: false },
+        { name: 'TON', default: false, active: false },
+        { name: 'BNB', default: false, active: false }
+      ];
+    }
   },
   
   referralBonus: {
