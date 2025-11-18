@@ -1,20 +1,22 @@
 # Pulse - Crypto Micro Prediction Game
 
-A blockchain-based micro prediction platform that allows users to wager tokens on real-time Bitcoin price movements. Built with a mobile-first approach and featuring a futuristic Tron-inspired design.
+A blockchain-based micro prediction platform that allows users to wager tokens on real-time cryptocurrency price movements across multiple tokens. Built with a mobile-first approach and featuring a futuristic Tron-inspired design.
 
 ## 🚀 Overview
 
-Pulse is a crypto-based micro prediction game where users can predict Bitcoin price movements in real-time (5-60 seconds) and win tokens. The platform features P2P matchmaking, multi-token support, referral systems, and comprehensive admin controls.
+Pulse is a crypto-based micro prediction game where users can predict price movements for top cryptocurrencies (BTC, ETH, SOL, DOGE, AVAX, LINK, XRP, MATIC, TON, BNB) in real-time (10-60 seconds) and win tokens. The platform features P2P matchmaking, multi-token betting support, referral systems, and comprehensive admin controls with token-specific analytics.
 
 **Live Demo:** [https://thepulse.bet](https://thepulse.bet)
 
 ## ✨ Key Features
 
 ### 🎮 Core Gameplay
-- **Real-time Bitcoin Price Predictions** - Predict UP/DOWN movements with 5-60 second durations
-- **Multi-token Support** - Bet with BeTyche, SOL, ETH, and RADBRO tokens
+- **Multi-Token Price Predictions** - Predict UP/DOWN movements for top 10 cryptocurrencies (BTC, ETH, SOL, DOGE, AVAX, LINK, XRP, MATIC, TON, BNB) with 10-60 second durations
+- **Token Selection** - Choose which crypto token to predict with dynamic dropdown selection
+- **Hybrid Oracle Engine** - Pyth Network + Binance WebSocket hybrid price feeds for all supported tokens
+- **Multi-token Betting** - Bet with BeTyche, SOL, ETH, and RADBRO tokens
 - **P2P Matchmaking** - Automated player matching with treasury-bot fallback
-- **Live Price Feeds** - Real-time BTC price data from Pyth Network
+- **Live Price Feeds** - Real-time price data from Pyth Network for all prediction tokens
 - **Instant Results** - Fast game resolution with immediate payouts
 
 ### 💰 Token & Wallet Integration
@@ -36,10 +38,13 @@ Pulse is a crypto-based micro prediction game where users can predict Bitcoin pr
 - **Leaderboards** - Track performance and rankings
 
 ### 🛡️ Admin & Security
-- **Admin Dashboard** - Comprehensive control panel
+- **Admin Dashboard** - Comprehensive control panel with token management
+- **Prediction Token Management** - Add/remove tokens, toggle active status, set default token
+- **Token Verification** - Verify Pyth Network feed IDs before adding new tokens
+- **Token-Specific Analytics** - View volume, win/loss, and usage stats per prediction token
 - **Treasury Management** - Automated fund management
 - **Security Features** - JWT authentication, encrypted data
-- **Analytics** - Detailed game and user analytics
+- **Analytics** - Detailed game and user analytics with token breakdowns
 
 ## 🏗️ Technical Architecture
 
@@ -62,7 +67,8 @@ Pulse is a crypto-based micro prediction game where users can predict Bitcoin pr
 ### Blockchain Integration
 - **Solana Web3.js** - Solana blockchain interaction
 - **SPL Token Program** - Token operations
-- **Pyth Network** - Real-time price feeds
+- **Pyth Network** - Real-time price feeds for multiple cryptocurrencies
+- **Hybrid Oracle System** - Pyth Network + Binance WebSocket fallback for reliable price data
 - **Multi-chain Support** - Ethereum integration ready
 
 ### Infrastructure
@@ -177,12 +183,36 @@ Pulse_Updated/
 
 1. **Connect Wallet** - Link your Solana or Ethereum wallet
 2. **Fund Account** - Deposit tokens (BeTyche, SOL, ETH, RADBRO)
-3. **Set Prediction** - Choose UP or DOWN for Bitcoin price
-4. **Set Duration** - Select prediction timeframe (5-60 seconds)
-5. **Place Bet** - Enter stake amount and confirm
-6. **Wait for Match** - System finds opponent or matches with bot
-7. **Watch Results** - Real-time price tracking and instant results
-8. **Collect Winnings** - Automatic payout to your wallet
+3. **Choose Prediction Token** - Select which cryptocurrency to predict (BTC, ETH, SOL, DOGE, AVAX, LINK, XRP, MATIC, TON, BNB)
+4. **Set Prediction** - Choose UP or DOWN for the selected token's price
+5. **Set Duration** - Select prediction timeframe (10-60 seconds)
+6. **Place Bet** - Enter stake amount and confirm
+7. **Wait for Match** - System finds opponent or matches with bot
+8. **Watch Results** - Real-time price tracking and instant results
+9. **Collect Winnings** - Automatic payout to your wallet
+
+## 🎯 Multi-Token Prediction Support
+
+Pulse supports predictions for **Top 10 Cryptocurrencies**:
+
+- **BTC** (Bitcoin) - Default token
+- **ETH** (Ethereum)
+- **SOL** (Solana)
+- **DOGE** (Dogecoin)
+- **AVAX** (Avalanche)
+- **LINK** (Chainlink)
+- **XRP** (Ripple)
+- **MATIC** (Polygon)
+- **TON** (Toncoin)
+- **BNB** (Binance Coin)
+
+### Features:
+- **Token Selection** - Users can choose which token to predict via dropdown
+- **Hybrid Oracle** - All tokens use the same reliable hybrid oracle engine (Pyth + Binance)
+- **Real-time Updates** - Live price feeds for all supported tokens via Socket.io
+- **Admin Control** - Admins can add/remove tokens, toggle active status, and set defaults
+- **Token Statistics** - View volume, win/loss, and usage metrics per token
+- **Consistent Game Logic** - All tokens follow identical match, fee, and resolution structure
 
 ## 🔧 Development
 
@@ -208,9 +238,9 @@ npm test           # Run tests
 
 - **User** - User accounts, tokens, referrals
 - **Game** - Game sessions and results
-- **Bet** - Individual bet records
+- **Bet** - Individual bet records with `predictionToken` field for multi-token support
 - **Admin** - Admin user management
-- **Settings** - Platform configuration
+- **Settings** - Platform configuration including `predictionTokens` array
 - **Transaction** - Blockchain transactions
 - **PayoutRequest** - Withdrawal requests
 
@@ -219,8 +249,11 @@ npm test           # Run tests
 - `GET /health` - Health check
 - `POST /api/wallet/*` - Wallet operations
 - `POST /api/game/*` - Game management
-- `POST /api/price/*` - Price data
+- `POST /api/price/*` - Price data and token verification
+  - `POST /api/price/verify` - Verify Pyth Network feed ID for tokens
 - `POST /api/admin/*` - Admin functions
+  - `GET /api/admin/dashboard/prediction-token-stats` - Token-specific statistics
+  - `GET /api/admin/dashboard/net-revenue` - Revenue analytics with token breakdown
 
 ## 🚀 Deployment
 
@@ -263,7 +296,10 @@ Ensure all production environment variables are set:
 
 - **Real-time Metrics** - Live game statistics
 - **User Analytics** - Player behavior tracking
-- **Financial Reports** - Revenue and payout tracking
+- **Financial Reports** - Revenue and payout tracking with token breakdowns
+- **Token-Specific Stats** - Volume, win/loss, and usage statistics per prediction token
+- **Net Revenue Analytics** - Revenue analysis by token with time period filtering
+- **Player Profitability** - Track player performance and net P/L
 - **System Health** - Performance monitoring
 - **Error Logging** - Comprehensive error tracking
 
@@ -284,7 +320,8 @@ This project is proprietary software. All rights reserved.
 **Muhammad Usama Muavia**
 - Project: Pulse Crypto Micro Prediction Game
 - Timeline: 21 days development + 2-3 weeks monitoring
-- Technologies: React, Node.js, Solana, MongoDB
+- Technologies: React, Node.js, Solana, MongoDB, Pyth Network
+- Features: Multi-token prediction support, Hybrid oracle engine, Real-time analytics
 
 ## 🆘 Support
 

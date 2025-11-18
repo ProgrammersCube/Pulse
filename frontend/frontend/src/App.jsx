@@ -11,6 +11,7 @@ import AccountOverview from './components/AccountOverview';
 import ReferallDashboard from './components/ReferallDashboard.jsx';
 import PulseDashboard from './components/PulseDashboard.jsx';
 import gameService from './services/game.service.ts';
+import { getTokenPrice } from './services/price.service.ts';
 import '@solana/wallet-adapter-react-ui/styles.css';
 import { useAppKitProvider, useAppKitAccount } from '@reown/appkit/react';
 import { SOUNDS } from './utils/sound.js';
@@ -144,6 +145,7 @@ const priceService = {
 const AppContext = createContext({
   user: null,
   btcPrice: null,
+  socket: null,
   loading: false,
   error: null,
   refreshUserData: async () => {},
@@ -347,6 +349,7 @@ const AppContextProvider = ({ children }) => {
   const value = {
     user,
     btcPrice,
+    socket,
     priceHistory,
     loading,
     error,
@@ -1630,7 +1633,7 @@ const GameSetupScreen = ({ showToast }) => {
   const { walletProvider } = useAppKitProvider('solana');
   const { address, isConnected } = useAppKitAccount();
 
-  const { user, btcPrice, socket,refreshUserData } = useAppContext();
+  const { user, btcPrice, socket, refreshUserData } = useAppContext();
   
   // Game state
   const [selectedDirection, setSelectedDirection] = useState(null);
@@ -1640,6 +1643,15 @@ const GameSetupScreen = ({ showToast }) => {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isCreatingBet, setIsCreatingBet] = useState(false);
   const [error, setError] = useState('');
+  
+  // Prediction tokens state
+  const [predictionTokens, setPredictionTokens] = useState([]);
+  const [selectedPredictionToken, setSelectedPredictionToken] = useState(null);
+  
+  // Prediction token price state
+  const [predictionTokenPrice, setPredictionTokenPrice] = useState(null);
+  const [priceLoading, setPriceLoading] = useState(false);
+  const lastPredictionPriceRef = useRef(0);
   
   // Transaction deduplication cache to prevent duplicate submissions
   const [recentTransactions, setRecentTransactions] = useState(new Map());
@@ -1803,6 +1815,30 @@ const GameSetupScreen = ({ showToast }) => {
         setHouseFee(settings.houseFeePercentage || 10);
         console.log('✅ Set house fee from API:', settings.houseFeePercentage || 10);
         
+        // Load prediction tokens from database settings (only active tokens)
+        if (settings.predictionTokens && Array.isArray(settings.predictionTokens)) {
+          // Filter to only active tokens
+          const activeTokens = settings.predictionTokens.filter(pt => pt.active === true);
+          setPredictionTokens(activeTokens);
+          
+          // Find and set default prediction token (prefer default, then first active)
+          const defaultToken = activeTokens.find(pt => pt.default === true) || activeTokens[0];
+          
+          if (defaultToken) {
+            setSelectedPredictionToken(defaultToken.name);
+            console.log('✅ Loaded prediction tokens. Default:', defaultToken.name);
+          } else {
+            // Fallback to BTC if no active tokens found
+            setSelectedPredictionToken('BTC');
+            console.log('⚠️ No active prediction tokens found, defaulting to BTC');
+          }
+        } else {
+          // Fallback to BTC if no prediction tokens in settings
+          setPredictionTokens([{ name: 'BTC', active: true, default: true }]);
+          setSelectedPredictionToken('BTC');
+          console.log('⚠️ No prediction tokens in settings, defaulting to BTC');
+        }
+        
       } else {
         throw new Error('Invalid API response format');
       }
@@ -1830,8 +1866,51 @@ const GameSetupScreen = ({ showToast }) => {
       setTokenStatus(defaultTokenStatus);
       setHouseFee(10);
       console.log('✅ Set fallback token limits:', defaultLimits);
+      
+      // Fallback prediction tokens
+      setPredictionTokens([{ name: 'BTC', active: true, default: true }]);
+      setSelectedPredictionToken('BTC');
+      console.log('✅ Set fallback prediction token: BTC');
     }
   };
+
+  // Fetch price for selected prediction token
+  const fetchPredictionTokenPrice = useCallback(async () => {
+    if (!selectedPredictionToken || predictionTokens.length === 0) {
+      console.log('⚠️ Cannot fetch price - missing token or tokens array');
+      return null;
+    }
+    
+    const selectedToken = predictionTokens.find(pt => pt.name === selectedPredictionToken);
+    if (!selectedToken || !selectedToken.pythFeedId) {
+      console.warn('⚠️ No Pyth feed ID for token:', selectedPredictionToken, 'Token:', selectedToken);
+      setPredictionTokenPrice(null);
+      return null;
+    }
+
+    setPriceLoading(true);
+    try {
+      const priceData = await getTokenPrice(selectedToken.pythFeedId);
+      setPredictionTokenPrice({
+        price: priceData.price,
+        timestamp: priceData.timestamp,
+        symbol: selectedPredictionToken
+      });
+      lastPredictionPriceRef.current = priceData.price;
+      return priceData;
+    } catch (error) {
+      console.error('❌ Error fetching prediction token price:', error);
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      setPredictionTokenPrice(null);
+      return null;
+    } finally {
+      setPriceLoading(false);
+    }
+  }, [selectedPredictionToken, predictionTokens]);
 
   useEffect(() => {
     if (!isConnected || !address) {
@@ -1853,6 +1932,103 @@ const GameSetupScreen = ({ showToast }) => {
       }
     }
   }, [tokenLimits, selectedToken]);
+
+  // Update selected prediction token if current token is no longer in the list
+  useEffect(() => {
+    if (predictionTokens.length > 0 && selectedPredictionToken) {
+      const currentToken = predictionTokens.find(pt => pt.name === selectedPredictionToken);
+      if (!currentToken) {
+        // Current prediction token is no longer available, switch to default or first available
+        const defaultToken = predictionTokens.find(pt => pt.default === true) || predictionTokens[0];
+        if (defaultToken) {
+          setSelectedPredictionToken(defaultToken.name);
+          console.log(`🔄 Switched to available prediction token: ${defaultToken.name}`);
+        }
+      }
+    }
+  }, [predictionTokens, selectedPredictionToken]);
+
+  // Subscribe to real-time prediction token price updates via socket
+  useEffect(() => {
+    if (!selectedPredictionToken || predictionTokens.length === 0) {
+      console.log('🔌 Subscription skipped - missing token or tokens array');
+      return;
+    }
+    
+    const selectedToken = predictionTokens.find(pt => pt.name === selectedPredictionToken);
+    if (!selectedToken || !selectedToken.pythFeedId) {
+      console.warn('⚠️ No Pyth feed ID for token:', selectedPredictionToken, 'Token object:', selectedToken);
+      setPredictionTokenPrice(null);
+      setPriceLoading(false);
+      return;
+    }
+
+    // Always fetch initial price via API first
+    setPriceLoading(true);
+    fetchPredictionTokenPrice()
+      .then((priceData) => {
+        if (priceData) {
+          setPredictionTokenPrice({
+            price: priceData.price,
+            timestamp: priceData.timestamp,
+            symbol: selectedPredictionToken
+          });
+          lastPredictionPriceRef.current = priceData.price;
+        }
+        setPriceLoading(false);
+      })
+      .catch((error) => {
+        console.error('❌ Error fetching initial price:', error);
+        setPriceLoading(false);
+      });
+
+    // Subscribe to socket updates if socket is available
+    if (socket && socket.connected) {
+
+      // Subscribe to token price updates
+      socket.emit('subscribe:token-price', {
+        symbol: selectedPredictionToken,
+        pythFeedId: selectedToken.pythFeedId
+      });
+      
+      // Listen for price updates
+      const handlePriceUpdate = (data) => {
+        if (data.symbol === selectedPredictionToken) {
+          setPredictionTokenPrice({
+            price: data.price,
+            timestamp: data.timestamp,
+            symbol: data.symbol
+          });
+          lastPredictionPriceRef.current = data.price;
+          setPriceLoading(false);
+        }
+      };
+      
+      socket.on('price:token', handlePriceUpdate);
+      
+      // Also listen for any socket errors
+      const handleError = (error) => {
+        console.error('❌ Socket error:', error);
+      };
+      socket.on('error', handleError);
+      
+      return () => {
+        // Unsubscribe when component unmounts or token changes
+        if (socket && socket.connected) {
+          socket.emit('unsubscribe:token-price', { symbol: selectedPredictionToken });
+        }
+        socket.off('price:token', handlePriceUpdate);
+        socket.off('error', handleError);
+      };
+    } else {
+      // If socket is not available, set up polling as fallback
+      const pollInterval = setInterval(() => {
+        fetchPredictionTokenPrice().catch(console.error);
+      }, 5000); // Poll every 5 seconds if no socket
+      
+      return () => clearInterval(pollInterval);
+    }
+  }, [socket, selectedPredictionToken, predictionTokens, fetchPredictionTokenPrice]);
 
   // Periodically refresh admin settings to keep in sync
   useEffect(() => {
@@ -2169,6 +2345,7 @@ const GameSetupScreen = ({ showToast }) => {
         direction: selectedDirection,
         amount: parseFloat(betAmount),
         token: selectedToken,
+        predictionToken: selectedPredictionToken || 'BTC', // Default to BTC if no prediction token selected
         duration: duration,
         transactionSignature: signature,
         transactionId: `${address.toString()}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -2240,6 +2417,141 @@ console.log('📤 Sending bet data to backend:', betData);
           🎮 SETUP YOUR PREDICTION
         </h2>
 
+        {/* Prediction Token Selection Dropdown */}
+        {predictionTokens.length > 0 && (
+          <div style={{ marginBottom: '30px' }}>
+            <h4 style={{ marginBottom: '15px' }}>Select Prediction Token</h4>
+            <select
+              value={selectedPredictionToken || ''}
+              onChange={(e) => setSelectedPredictionToken(e.target.value)}
+              className="neon-input"
+              style={{
+                width: '100%',
+                padding: '12px 15px',
+                fontSize: '1rem',
+                background: 'rgba(0, 0, 0, 0.4)',
+                border: '2px solid var(--neon-blue)',
+                borderRadius: '8px',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                outline: 'none',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              {predictionTokens.map((token) => (
+                <option 
+                  key={token.name} 
+                  value={token.name}
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.9)',
+                    color: 'var(--text-primary)'
+                  }}
+                >
+                  {token.name} {token.default ? '(Default)' : ''}
+                </option>
+              ))}
+            </select>
+            <div style={{ 
+              marginTop: '8px', 
+              fontSize: '0.85rem', 
+              opacity: 0.7,
+              color: 'var(--text-secondary)'
+            }}>
+              You will predict the price movement of {selectedPredictionToken || 'BTC'}
+            </div>
+          </div>
+        )}
+
+        {/* Live Price Display for Selected Prediction Token */}
+        {selectedPredictionToken && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ 
+              opacity: 1, 
+              y: 0
+            }}
+            style={{
+              marginBottom: '30px',
+              padding: '20px',
+              background: 'linear-gradient(135deg, rgba(0, 255, 187, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%)',
+              borderRadius: '12px',
+              border: '2px solid rgba(0, 255, 187, 0.5)',
+              position: 'relative',
+              overflow: 'hidden',
+              boxShadow: predictionTokenPrice 
+                ? '0 0 20px rgba(0, 255, 187, 0.3), inset 0 0 20px rgba(0, 255, 187, 0.1)'
+                : '0 0 10px rgba(0, 255, 187, 0.2)'
+            }}
+            transition={{ duration: 0.5 }}
+          >
+            <div style={{ 
+              fontSize: '0.9rem', 
+              opacity: 0.9, 
+              marginBottom: '10px',
+              fontWeight: 'bold',
+              color: 'var(--neon-cyan)'
+            }}>
+              Live {selectedPredictionToken}/USD Price
+            </div>
+            
+            {priceLoading ? (
+              <div style={{ fontSize: '1.2rem', opacity: 0.7 }}>Loading...</div>
+            ) : predictionTokenPrice ? (
+              <>
+                <motion.div 
+                  style={{ 
+                    fontSize: '2rem', 
+                    fontWeight: 'bold',
+                    background: predictionTokenPrice.price > lastPredictionPriceRef.current 
+                      ? 'linear-gradient(90deg, #00ff00, var(--neon-cyan))'
+                      : predictionTokenPrice.price < lastPredictionPriceRef.current
+                      ? 'linear-gradient(90deg, #ff0000, var(--neon-cyan))'
+                      : 'linear-gradient(90deg, #fff, var(--neon-cyan))',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    textShadow: 'none'
+                  }}
+                  key={predictionTokenPrice.timestamp}
+                  animate={{ scale: [1, 1.03, 1] }}
+                  transition={{ duration: 0.5 }}
+                  onAnimationComplete={() => {
+                    lastPredictionPriceRef.current = predictionTokenPrice.price;
+                  }}
+                >
+                  ${predictionTokenPrice.price.toLocaleString(undefined, { 
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  })}
+                </motion.div>
+                <div style={{ 
+                  fontSize: '0.75rem', 
+                  opacity: 0.7, 
+                  marginTop: '8px',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}>
+                  <span>Real-time Pyth + Binance Hybrid Price</span>
+                  <span style={{
+                    padding: '2px 8px',
+                    background: 'rgba(0, 255, 0, 0.2)',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(0, 255, 0, 0.5)',
+                    fontSize: '0.7rem'
+                  }}>
+                    LIVE
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: '1rem', opacity: 0.7, color: '#ff6b6b' }}>
+                ⚠️ Price feed unavailable. Please check token configuration.
+              </div>
+            )}
+          </motion.div>
+        )}
+
         {!systemStatus.loading && !systemStatus.canBet && (
   <motion.div
     initial={{ opacity: 0, scale: 0.9 }}
@@ -2308,7 +2620,7 @@ console.log('📤 Sending bet data to backend:', betData);
           <>
             {/* Direction Selection */}
             <div style={{ marginBottom: '30px' }}>
-              <h4 style={{ marginBottom: '15px' }}>1. Select BTC Direction</h4>
+              <h4 style={{ marginBottom: '15px' }}>1. Select {selectedPredictionToken || 'BTC'} Direction</h4>
               <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
                 <motion.button
                   className={`direction-button ${selectedDirection === 'UP' ? 'selected' : ''}`}
@@ -2677,8 +2989,8 @@ console.log('📤 Sending bet data to backend:', betData);
 
 
             
-            {/* Current BTC Price */}
-            {btcPrice && (
+            {/* Current Price (Prediction Token or BTC) */}
+            {((selectedPredictionToken && predictionTokenPrice) || btcPrice) && (
   <motion.div style={{
     textAlign: 'center',
     marginBottom: '20px',
@@ -2707,11 +3019,13 @@ console.log('📤 Sending bet data to backend:', betData);
         WebkitTextFillColor: 'transparent',
         textShadow: 'none'
       }}
-      key={btcPrice.timestamp}
+      key={selectedPredictionToken && predictionTokenPrice ? predictionTokenPrice.timestamp : (btcPrice ? btcPrice.timestamp : 0)}
       animate={{ scale: [1, 1.03, 1] }}
       transition={{ duration: 0.5 }}
     >
-      ${btcPrice.price.toFixed(2)}
+      ${selectedPredictionToken && predictionTokenPrice 
+        ? predictionTokenPrice.price.toFixed(2) 
+        : btcPrice ? btcPrice.price.toFixed(2) : '---'}
     </motion.div>
     <div style={{ 
       fontSize: '0.85rem', 
@@ -2803,7 +3117,9 @@ console.log('📤 Sending bet data to backend:', betData);
         color: 'var(--neon-cyan)',
         textShadow: '0 0 15px rgba(0, 255, 187, 0.8)'
       }}>
-        ${btcPrice ? btcPrice.price.toFixed(2) : '---'}
+        ${selectedPredictionToken && predictionTokenPrice 
+          ? predictionTokenPrice.price.toFixed(2) 
+          : btcPrice ? btcPrice.price.toFixed(2) : '---'}
       </div>
       <div style={{ fontSize: '0.85rem', opacity: 0.7, marginTop: '10px' }}>
         This is the price your prediction will be based on
@@ -2948,7 +3264,10 @@ const GamePlayScreen = () => {
   const { socket, refreshUserData, btcPrice } = useAppContext();
   
   // Get bet data from navigation state
-  const { betId, bet } = location.state || {};
+  const { betId, bet: initialBet } = location.state || {};
+  
+  // Store bet in state so we can update it from API
+  const [bet, setBet] = useState(initialBet);
   
   // Game states
   const [gamePhase, setGamePhase] = useState('COUNTDOWN'); // COUNTDOWN, MATCHING, PLAYING, COMPLETED
@@ -2957,15 +3276,50 @@ const GamePlayScreen = () => {
   const [opponent, setOpponent] = useState(null);
   const [gameTimer, setGameTimer] = useState(0);
   const [currentPrice, setCurrentPrice] = useState(null);
+  const [predictionTokenPrice, setPredictionTokenPrice] = useState(null);
   const [finalPrice, setFinalPrice] = useState(null);
   const [gameResult, setGameResult] = useState(null);
+  
+  // Fetch bet from API to ensure we have the latest data including correct lockedPrice
+  useEffect(() => {
+    if (!betId) {
+      navigate('/game/setup');
+      return;
+    }
+    
+    const fetchBet = async () => {
+      try {
+        const response = await gameService.getBetStatus(betId);
+        if (response.success && response.data) {
+          console.log('✅ Fetched bet from API:', response.data);
+          setBet(response.data);
+        } else if (initialBet) {
+          // Fallback to initial bet if API fails
+          console.warn('⚠️ Could not fetch bet from API, using initial bet data');
+          setBet(initialBet);
+        } else {
+          navigate('/game/setup');
+        }
+      } catch (error) {
+        console.error('❌ Error fetching bet:', error);
+        if (initialBet) {
+          // Fallback to initial bet if API fails
+          setBet(initialBet);
+        } else {
+          navigate('/game/setup');
+        }
+      }
+    };
+    
+    fetchBet();
+  }, [betId, navigate, initialBet]);
   
   // Redirect if no bet data
   useEffect(() => {
     if (!betId || !bet) {
-      navigate('/game/setup');
+      return; // Don't navigate immediately, wait for fetch
     }
-  }, [betId, bet, navigate]);
+  }, [betId, bet]);
   
   // Join game room and listen for updates
   // Join game room and listen for updates
@@ -3042,9 +3396,34 @@ useEffect(() => {
   });
   
   // Listen for price updates
-  socket.on('price:btc', (data) => {
-    setCurrentPrice(data.price);
-  });
+  const handleBtcPrice = (data) => {
+    // Only set BTC price if bet is for BTC
+    if (!bet?.predictionToken || bet.predictionToken === 'BTC') {
+      setCurrentPrice(data.price);
+    }
+  };
+  socket.on('price:btc', handleBtcPrice);
+  
+  // Subscribe to prediction token price if bet is for a prediction token
+  const handleTokenPrice = (data) => {
+    if (bet?.predictionToken && data.symbol === bet.predictionToken) {
+      setCurrentPrice(data.price);
+      setPredictionTokenPrice({
+        price: data.price,
+        timestamp: data.timestamp,
+        symbol: data.symbol
+      });
+    }
+  };
+  
+  if (bet?.predictionToken && bet.predictionToken !== 'BTC') {
+    // Subscribe to prediction token price updates
+    socket.emit('subscribe:token-price', {
+      symbol: bet.predictionToken,
+      pythFeedId: null // Backend will look up the feed ID
+    });
+    socket.on('price:token', handleTokenPrice);
+  }
   
   // Listen for bet cancellation
   socket.on('bet:cancelled', (data) => {
@@ -3067,8 +3446,14 @@ useEffect(() => {
     socket.off('game:countdown');
     socket.off('game:completed');
     socket.off('balance:updated');
-    socket.off('price:btc');
+    socket.off('price:btc', handleBtcPrice);
+    socket.off('price:token', handleTokenPrice);
     socket.off('bet:cancelled');
+    
+    // Unsubscribe from token price if needed
+    if (bet?.predictionToken && bet.predictionToken !== 'BTC') {
+      socket.emit('unsubscribe:token-price', { symbol: bet.predictionToken });
+    }
   };
 }, [socket, betId, bet, navigate, refreshUserData, gamePhase]);
 
@@ -3094,6 +3479,7 @@ const checkGameCompletion = async (forceCheck = false) => {
       const gameResult = {
         betId: completeResponse.data.betId,
         result: completeResponse.data.result,
+        lockedPrice: bet.lockedPrice || completeResponse.data.lockedPrice,
         finalPrice: completeResponse.data.finalPrice || bet.lockedPrice,
         payout: completeResponse.data.payout || 0,
         balanceChange: completeResponse.data.balanceChange || 0,
@@ -3125,14 +3511,15 @@ const checkGameCompletion = async (forceCheck = false) => {
           const gameResult = {
             betId: currentBet.betId,
             result: currentBet.result,
+            lockedPrice: currentBet.lockedPrice || bet.lockedPrice,
             finalPrice: currentBet.finalPrice,
             payout: currentBet.payout,
             balanceChange: currentBet.result === 'WIN' ? 
               currentBet.payout - currentBet.amount :
               currentBet.result === 'DRAW' ? 0 : -currentBet.amount,
             priceChange: {
-              amount: (currentBet.finalPrice || bet.lockedPrice) - bet.lockedPrice,
-              percentage: (((currentBet.finalPrice || bet.lockedPrice) - bet.lockedPrice) / bet.lockedPrice * 100).toFixed(2)
+              amount: (currentBet.finalPrice || bet.lockedPrice) - (currentBet.lockedPrice || bet.lockedPrice),
+              percentage: (((currentBet.finalPrice || bet.lockedPrice) - (currentBet.lockedPrice || bet.lockedPrice)) / (currentBet.lockedPrice || bet.lockedPrice) * 100).toFixed(2)
             },
             realWalletUpdate: true
           };
@@ -3493,6 +3880,7 @@ useEffect(() => {
               const localResult = {
                 betId,
                 result: 'DRAW',
+                lockedPrice: bet?.lockedPrice || 0,
                 finalPrice,
                 payout: 0,
                 balanceChange: 0,
@@ -3582,13 +3970,14 @@ const pollGameStatus = async (isRetry = false) => {
       const gameResult = {
         betId: betData.betId,
         result: betData.result,
+        lockedPrice: betData.lockedPrice || bet.lockedPrice,
         finalPrice: betData.finalPrice || bet.lockedPrice,
         payout: betData.payout || 0,
         balanceChange: betData.result === 'WIN' ? (betData.payout || 0) : 
                       betData.result === 'LOSS' ? -(betData.amount || 0) : 0,
         priceChange: {
-          amount: (betData.finalPrice || bet.lockedPrice) - bet.lockedPrice,
-          percentage: (((betData.finalPrice || bet.lockedPrice) - bet.lockedPrice) / bet.lockedPrice * 100).toFixed(2)
+          amount: (betData.finalPrice || bet.lockedPrice) - (betData.lockedPrice || bet.lockedPrice),
+          percentage: (((betData.finalPrice || bet.lockedPrice) - (betData.lockedPrice || bet.lockedPrice)) / (betData.lockedPrice || bet.lockedPrice) * 100).toFixed(2)
         },
         realWalletUpdate: true
       };
@@ -3612,6 +4001,7 @@ if (currentStatus === 'IN_PROGRESS' && currentStatus !== 'COMPLETED' && currentS
         const gameResult = {
           betId: completeResponse.data.betId,
           result: completeResponse.data.result,
+          lockedPrice: bet.lockedPrice || completeResponse.data.lockedPrice,
           finalPrice: completeResponse.data.finalPrice || bet.lockedPrice,
           payout: completeResponse.data.payout || 0,
           balanceChange: completeResponse.data.balanceChange || 0,
@@ -3850,9 +4240,13 @@ if (currentStatus === 'IN_PROGRESS' && currentStatus !== 'COMPLETED' && currentS
     </div>
   </div>
       <div className="neon-card" style={{ width: '100%', minWidth: 0, maxWidth: '100vw', boxSizing: 'border-box' }}>
-    <div style={{ fontSize: '1.1rem', opacity: 0.8, marginBottom: '8px' }}>Live BTC Price</div>
+    <div style={{ fontSize: '1.1rem', opacity: 0.8, marginBottom: '8px' }}>
+      Live {bet?.predictionToken || 'BTC'} Price
+    </div>
     <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: 'var(--neon-red)', letterSpacing: '2px' }}>
-      ${btcPrice?.price?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      ${(bet?.predictionToken && bet.predictionToken !== 'BTC' && currentPrice) 
+        ? currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : btcPrice?.price?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
     </div>
   </div>
 </div>
@@ -4249,15 +4643,25 @@ if (currentStatus === 'IN_PROGRESS' && currentStatus !== 'COMPLETED' && currentS
       {/* Price Details */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>Locked Price</div>
+          <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>
+            Locked {bet?.predictionToken || 'BTC'} Price
+          </div>
           <div className="price-text" style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>
-            ${gameResult.lockedPrice}
+            ${(gameResult.lockedPrice || bet?.lockedPrice || 0).toLocaleString(undefined, { 
+              minimumFractionDigits: 2, 
+              maximumFractionDigits: 2 
+            })}
           </div>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>Final Price</div>
+          <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>
+            Final {bet?.predictionToken || 'BTC'} Price
+          </div>
           <div className="price-text" style={{ fontSize: '1.3rem', fontWeight: 'bold' }}>
-            ${gameResult.finalPrice?.toFixed(2)}
+            ${(gameResult.finalPrice || bet?.lockedPrice || 0).toLocaleString(undefined, { 
+              minimumFractionDigits: 2, 
+              maximumFractionDigits: 2 
+            })}
           </div>
         </div>
       </div>

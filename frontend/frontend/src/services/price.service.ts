@@ -36,3 +36,23 @@ export const getHistoricalPrices = async (timeframe: string = '1h') => {
     throw error;
   }
 };
+
+// Get price for any token using Pyth feed ID (via backend)
+export const getTokenPrice = async (pythFeedId: string) => {
+  try {
+    if (!pythFeedId) {
+      throw new Error('Pyth feed ID is required');
+    }
+
+    const response = await api.get('/api/price/token', {
+      params: {
+        pythFeedId
+      }
+    });
+    
+    return response.data.data;
+  } catch (error) {
+    console.error('Error fetching token price:', error);
+    throw error;
+  }
+};

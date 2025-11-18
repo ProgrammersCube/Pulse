@@ -61,6 +61,13 @@ interface PythApiResponse {
   parsed: PythPriceData[];
 }
 
+// Token registration interface
+interface TokenConfig {
+  symbol: string;
+  pythFeedId: string;
+  binanceSymbol: string; // e.g., 'BTCUSDT', 'AVAXUSDT'
+}
+
 // Hybrid Price Manager with Pyth + Binance
 class HybridPriceManager extends EventEmitter {
   private priceCache: Map<string, PriceCache>;
@@ -68,11 +75,17 @@ class HybridPriceManager extends EventEmitter {
   private lockedPrices: Map<string, LockedPrice>;
   private binanceWs: WebSocket | null = null;
   private pythStreamConnection: any = null;
-  private lastBinancePrice: number = 0;
-  private lastPythPrice: number = 0;
   private priceUpdateTimer: NodeJS.Timeout | null = null;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 10;
+  private reconnectTimeout: NodeJS.Timeout | null = null; // Debounce reconnect attempts
+  private isReconnecting: boolean = false; // Prevent concurrent reconnections
+  
+  // Track registered tokens: symbol -> TokenConfig
+  private registeredTokens: Map<string, TokenConfig>;
+  
+  // Track last known prices per token: symbol -> { binance: number, pyth: number }
+  private lastPrices: Map<string, { binance: number; pyth: number }>;
   
   // Official Pyth price feed IDs from documentation
   private readonly PRICE_FEED_IDS = {
@@ -83,7 +96,7 @@ class HybridPriceManager extends EventEmitter {
   // API endpoints
   private readonly PYTH_API_URL = 'https://hermes.pyth.network/v2/updates/price/latest';
   private readonly PYTH_STREAM_URL = 'https://hermes.pyth.network/v2/updates/price/stream';
-  private readonly BINANCE_WS_URL = 'wss://stream.binance.com:9443/ws/btcusdt@trade';
+  private readonly BINANCE_WS_BASE = 'wss://stream.binance.com:9443';
   
   constructor() {
     super();
@@ -91,11 +104,19 @@ class HybridPriceManager extends EventEmitter {
     this.priceCache = new Map();
     this.updateInterval = null;
     this.lockedPrices = new Map();
+    this.registeredTokens = new Map();
+    this.lastPrices = new Map();
     
     console.log('🚀 Hybrid Price Manager (Pyth + Binance) initialized');
-    console.log('📊 Using BTC Price Feed ID:', this.PRICE_FEED_IDS.BTC);
     console.log('🌐 Pyth REST API:', this.PYTH_API_URL);
-    console.log('🔌 Binance WebSocket:', this.BINANCE_WS_URL);
+    console.log('🔌 Binance WebSocket Base:', this.BINANCE_WS_BASE);
+    
+    // Register BTC by default
+    this.registerToken({
+      symbol: 'BTC',
+      pythFeedId: this.PRICE_FEED_IDS.BTC,
+      binanceSymbol: 'BTCUSDT'
+    });
     
     // Start all price sources
     this.startBinanceWebSocket();
@@ -106,32 +127,146 @@ class HybridPriceManager extends EventEmitter {
     this.fetchInitialPrices();
   }
   
-  // Start Binance WebSocket for real-time updates
+  // Register a token for hybrid price tracking
+  public registerToken(config: TokenConfig): void {
+    const { symbol, pythFeedId, binanceSymbol } = config;
+    
+    const isNewToken = !this.registeredTokens.has(symbol);
+    
+    if (isNewToken) {
+      console.log(`📝 Registering token: ${symbol} (Pyth: ${pythFeedId.slice(0, 20)}..., Binance: ${binanceSymbol})`);
+    } else {
+      console.log(`🔄 Token ${symbol} already registered, skipping reconnect`);
+      // Update config but don't reconnect
+      this.registeredTokens.set(symbol, config);
+      return; // Early return - don't reconnect if already registered
+    }
+    
+    this.registeredTokens.set(symbol, config);
+    this.lastPrices.set(symbol, { binance: 0, pyth: 0 });
+    
+    // Only reconnect if this is a new token
+    this.reconnectBinanceWebSocket();
+  }
+  
+  // Unregister a token
+  public unregisterToken(symbol: string): void {
+    if (this.registeredTokens.delete(symbol)) {
+      this.lastPrices.delete(symbol);
+      console.log(`🗑️ Unregistered token: ${symbol}`);
+      // Reconnect Binance WebSocket to remove token
+      this.reconnectBinanceWebSocket();
+    }
+  }
+  
+  // Get all registered tokens
+  public getRegisteredTokens(): TokenConfig[] {
+    return Array.from(this.registeredTokens.values());
+  }
+  
+  // Start Binance WebSocket for real-time updates (supports multiple tokens)
   private startBinanceWebSocket() {
     try {
-      console.log('🔌 Connecting to Binance WebSocket...');
+      const tokens = Array.from(this.registeredTokens.values());
       
-      this.binanceWs = new WebSocket(this.BINANCE_WS_URL);
+      if (tokens.length === 0) {
+        console.log('⚠️ No tokens registered, skipping Binance WebSocket');
+        this.isReconnecting = false;
+        return;
+      }
+      
+      // Don't start if already connecting or connected (unless we're explicitly reconnecting)
+      if (this.binanceWs && !this.isReconnecting) {
+        const state = this.binanceWs.readyState;
+        if (state === WebSocket.CONNECTING || state === WebSocket.OPEN) {
+          console.log('⚠️ Binance WebSocket already connecting/connected, skipping');
+          return;
+        }
+      }
+      
+      // Build combined stream URL for multiple tokens
+      // Format: wss://stream.binance.com:9443/stream?streams=btcusdt@trade/ethusdt@trade/avaxusdt@trade
+      const streams = tokens.map(t => `${t.binanceSymbol.toLowerCase()}@trade`).join('/');
+      const wsUrl = `${this.BINANCE_WS_BASE}/stream?streams=${streams}`;
+      
+      console.log(`🔌 Connecting to Binance WebSocket for ${tokens.length} token(s)...`);
+      
+      // Close existing connection if any
+      if (this.binanceWs) {
+        try {
+          // Remove all listeners to prevent duplicate handlers
+          this.binanceWs.removeAllListeners();
+          if (this.binanceWs.readyState === WebSocket.OPEN || 
+              this.binanceWs.readyState === WebSocket.CONNECTING) {
+            this.binanceWs.close();
+          }
+        } catch (e) {
+          // Ignore errors when closing
+        }
+        this.binanceWs = null;
+      }
+      
+      this.isReconnecting = false; // Reset flag before creating new connection
+      this.binanceWs = new WebSocket(wsUrl);
       
       this.binanceWs.on('open', () => {
-        console.log('✅ Binance WebSocket connected!');
+        console.log(`✅ Binance WebSocket connected! Tracking: ${tokens.map(t => t.symbol).join(', ')}`);
         this.reconnectAttempts = 0;
+        this.isReconnecting = false;
       });
       
       this.binanceWs.on('message', (data: Buffer) => {
         try {
-          const trade = JSON.parse(data.toString());
-          const price = parseFloat(trade.p);
+          const message = JSON.parse(data.toString());
           
-          if (price > 0 && price < 1000000) { // Sanity check
-            this.lastBinancePrice = price;
+          // Binance combined stream format: { stream: "btcusdt@trade", data: { ... } }
+          if (message.stream && message.data) {
+            const stream = message.stream;
+            const trade = message.data;
+            const price = parseFloat(trade.p);
             
-            // Update cache with Binance price
-            this.priceCache.set('BTC_BINANCE', {
-              price,
-              timestamp: Date.now(),
-              source: 'binance'
-            });
+            // Find which token this stream belongs to
+            const tokenConfig = tokens.find(t => 
+              stream.toLowerCase() === `${t.binanceSymbol.toLowerCase()}@trade`
+            );
+            
+            if (tokenConfig && price > 0) {
+              const symbol = tokenConfig.symbol;
+              
+              // Sanity check based on token (BTC: 1000-1000000, others: 0.01-100000)
+              const maxPrice = symbol === 'BTC' ? 1000000 : 100000;
+              const minPrice = symbol === 'BTC' ? 1000 : 0.01;
+              
+              if (price >= minPrice && price <= maxPrice) {
+                const lastPrices = this.lastPrices.get(symbol) || { binance: 0, pyth: 0 };
+                lastPrices.binance = price;
+                this.lastPrices.set(symbol, lastPrices);
+                
+                // Update cache with Binance price
+                this.priceCache.set(`${symbol}_BINANCE`, {
+                  price,
+                  timestamp: Date.now(),
+                  source: 'binance'
+                });
+              }
+            }
+          } else if (message.p) {
+            // Fallback: single stream format (for backward compatibility)
+            const price = parseFloat(message.p);
+            if (price > 0 && price < 1000000) {
+              const btcConfig = this.registeredTokens.get('BTC');
+              if (btcConfig) {
+                const lastPrices = this.lastPrices.get('BTC') || { binance: 0, pyth: 0 };
+                lastPrices.binance = price;
+                this.lastPrices.set('BTC', lastPrices);
+                
+                this.priceCache.set('BTC_BINANCE', {
+                  price,
+                  timestamp: Date.now(),
+                  source: 'binance'
+                });
+              }
+            }
           }
         } catch (error) {
           console.error('Error parsing Binance data:', error);
@@ -143,7 +278,10 @@ class HybridPriceManager extends EventEmitter {
       });
       
       this.binanceWs.on('close', () => {
-        console.log('🔄 Binance WebSocket disconnected, reconnecting...');
+        // Only log if this wasn't an intentional close (reconnect)
+        if (!this.isReconnecting) {
+          console.log('🔄 Binance WebSocket disconnected, reconnecting...');
+        }
         
         // Exponential backoff for reconnection
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -151,8 +289,11 @@ class HybridPriceManager extends EventEmitter {
           const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
           
           setTimeout(() => {
+            this.isReconnecting = false; // Reset flag before reconnecting
             this.startBinanceWebSocket();
           }, delay);
+        } else {
+          this.isReconnecting = false;
         }
       });
       
@@ -166,25 +307,72 @@ class HybridPriceManager extends EventEmitter {
     }
   }
   
-  // Pyth polling for reliable price (every 5 seconds)
+  // Reconnect Binance WebSocket (used when tokens are added/removed)
+  private reconnectBinanceWebSocket() {
+    // Clear any pending reconnect timeout to debounce rapid calls
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    
+    // Don't reconnect if already reconnecting
+    if (this.isReconnecting) {
+      console.log('⚠️ Reconnect already in progress, skipping');
+      return;
+    }
+    
+    this.isReconnecting = true;
+    
+    // Close existing connection if open or connecting
+    if (this.binanceWs) {
+      try {
+        if (this.binanceWs.readyState === WebSocket.OPEN || 
+            this.binanceWs.readyState === WebSocket.CONNECTING) {
+          this.binanceWs.removeAllListeners();
+          this.binanceWs.close();
+        }
+      } catch (e) {
+        // Ignore errors when closing
+      }
+      this.binanceWs = null;
+    }
+    
+    // Debounce reconnect to prevent rapid reconnections
+    this.reconnectTimeout = setTimeout(() => {
+      this.reconnectTimeout = null;
+      this.isReconnecting = false; // Reset flag before starting
+      this.startBinanceWebSocket();
+    }, 1000);
+  }
+  
+  // Pyth polling for reliable price (every 5 seconds) - supports multiple tokens
   private startPythPolling() {
     // Initial fetch
-    this.fetchPythPrice();
+    this.fetchPythPrices();
     
     // Then poll every 5 seconds
     this.updateInterval = setInterval(async () => {
-      await this.fetchPythPrice();
+      await this.fetchPythPrices();
     }, 5000);
     
     console.log('🔄 Started Pyth polling every 5 seconds');
   }
   
-  // Fetch latest BTC price using official Pyth REST API
-  private async fetchPythPrice() {
+  // Fetch latest prices for all registered tokens using official Pyth REST API
+  private async fetchPythPrices() {
+    const tokens = Array.from(this.registeredTokens.values());
+    
+    if (tokens.length === 0) {
+      return;
+    }
+    
     try {
+      // Fetch all tokens in one request
+      const feedIds = tokens.map(t => t.pythFeedId);
+      
       const response = await axios.get(this.PYTH_API_URL, {
         params: {
-          'ids[]': this.PRICE_FEED_IDS.BTC
+          'ids[]': feedIds
         },
         timeout: 5000,
         headers: {
@@ -196,33 +384,44 @@ class HybridPriceManager extends EventEmitter {
       if (response.data && response.data.parsed && Array.isArray(response.data.parsed)) {
         const parsed = response.data.parsed as PythPriceData[];
         
-        if (parsed.length > 0) {
-          const btcPriceData = parsed.find(item => 
-            item.id === this.PRICE_FEED_IDS.BTC.replace('0x', '')
-          ) || parsed[0];
+        // Process each token's price
+        tokens.forEach(tokenConfig => {
+          const { symbol, pythFeedId } = tokenConfig;
           
-          if (btcPriceData && btcPriceData.price) {
-            const rawPrice = parseInt(btcPriceData.price.price);
-            const exponent = btcPriceData.price.expo;
+          // Find matching price data (Pyth returns feed ID without 0x prefix)
+          const feedIdWithoutPrefix = pythFeedId.replace('0x', '');
+          const priceData = parsed.find(item => 
+            item.id === feedIdWithoutPrefix || item.id === pythFeedId
+          );
+          
+          if (priceData && priceData.price) {
+            const rawPrice = parseInt(priceData.price.price);
+            const exponent = priceData.price.expo;
             const price = rawPrice * Math.pow(10, exponent);
-            const publishTime = btcPriceData.price.publish_time * 1000;
+            const publishTime = priceData.price.publish_time * 1000;
             
-            if (price > 1000 && price < 1000000) { // Sanity check for BTC price
-              this.lastPythPrice = price;
+            // Sanity check based on token
+            const maxPrice = symbol === 'BTC' ? 1000000 : 100000;
+            const minPrice = symbol === 'BTC' ? 1000 : 0.01;
+            
+            if (price >= minPrice && price <= maxPrice) {
+              const lastPrices = this.lastPrices.get(symbol) || { binance: 0, pyth: 0 };
+              lastPrices.pyth = price;
+              this.lastPrices.set(symbol, lastPrices);
               
-              this.priceCache.set('BTC_PYTH', {
+              this.priceCache.set(`${symbol}_PYTH`, {
                 price,
                 timestamp: publishTime,
                 source: 'pyth'
               });
               
-              // Store in database occasionally (every minute)
-              if (Date.now() % 60000 < 5000) {
+              // Store in database occasionally (every minute, only for BTC)
+              if (symbol === 'BTC' && Date.now() % 60000 < 5000) {
                 this.savePriceToDatabase('BTC', price, publishTime);
               }
             }
           }
-        }
+        });
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -232,71 +431,81 @@ class HybridPriceManager extends EventEmitter {
           statusText: error.response?.statusText
         });
       } else if (error instanceof Error) {
-        console.error('❌ Unexpected error fetching Pyth price:', error.message);
+        console.error('❌ Unexpected error fetching Pyth prices:', error.message);
       } else {
-        console.error('❌ Unknown error fetching Pyth price:', error);
+        console.error('❌ Unknown error fetching Pyth prices:', error);
       }
     }
   }
   
-  // Hybrid price update system - combines both sources every 250ms
+  // Hybrid price update system - combines both sources every 250ms for all tokens
   private startHybridPriceUpdates() {
     // Update every 250ms using interpolation and combination
     this.priceUpdateTimer = setInterval(() => {
-      const hybridPrice = this.calculateHybridPrice();
+      const tokens = Array.from(this.registeredTokens.keys());
       
-      if (hybridPrice > 0) {
-        // Add micro-movements for realism (very small variations)
-        const microMovement = (Math.random() - 0.5) * 0.50; // ±$0.25 max
-        const finalPrice = parseFloat((hybridPrice + microMovement).toFixed(2));
+      tokens.forEach(symbol => {
+        const hybridPrice = this.calculateHybridPrice(symbol);
         
-        // Update main cache
-        this.priceCache.set('BTC', {
-          price: finalPrice,
-          timestamp: Date.now(),
-          source: 'hybrid'
-        });
-        
-        // Emit price update event for Socket.IO
-        this.emit('price:update', {
-          symbol: 'BTC',
-          price: finalPrice,
-          timestamp: Date.now(),
-          source: 'hybrid',
-          binancePrice: this.lastBinancePrice,
-          pythPrice: this.lastPythPrice,
-          confidence: this.calculateConfidence()
-        });
-      }
+        if (hybridPrice > 0) {
+          // Add micro-movements for realism (very small variations)
+          // Scale micro-movement based on token price (BTC: ±$0.25, others: ±0.1%)
+          const microMovementScale = symbol === 'BTC' ? 0.50 : hybridPrice * 0.001;
+          const microMovement = (Math.random() - 0.5) * microMovementScale;
+          const finalPrice = parseFloat((hybridPrice + microMovement).toFixed(2));
+          
+          // Update main cache
+          this.priceCache.set(symbol, {
+            price: finalPrice,
+            timestamp: Date.now(),
+            source: 'hybrid'
+          });
+          
+          const lastPrices = this.lastPrices.get(symbol) || { binance: 0, pyth: 0 };
+          
+          // Emit price update event for Socket.IO
+          this.emit('price:update', {
+            symbol,
+            price: finalPrice,
+            timestamp: Date.now(),
+            source: 'hybrid',
+            binancePrice: lastPrices.binance,
+            pythPrice: lastPrices.pyth,
+            confidence: this.calculateConfidence(symbol)
+          });
+        }
+      });
     }, 250); // Every 250ms for smooth updates
     
     console.log('⚡ Started hybrid price updates every 250ms');
   }
   
-  // Calculate hybrid price using weighted average
-  private calculateHybridPrice(): number {
+  // Calculate hybrid price using weighted average for a specific token
+  private calculateHybridPrice(symbol: string): number {
     let totalPrice = 0;
     let totalWeight = 0;
     
+    const lastPrices = this.lastPrices.get(symbol) || { binance: 0, pyth: 0 };
+    
     // Get Binance price (higher weight for real-time)
-    const binanceData = this.priceCache.get('BTC_BINANCE');
+    const binanceData = this.priceCache.get(`${symbol}_BINANCE`);
     if (binanceData && (Date.now() - binanceData.timestamp) < 3000) { // Fresh if < 3 seconds
       totalPrice += binanceData.price * 0.7; // 70% weight
       totalWeight += 0.7;
-    } else if (this.lastBinancePrice > 0) {
+    } else if (lastPrices.binance > 0) {
       // Use last known Binance price with reduced weight
-      totalPrice += this.lastBinancePrice * 0.5;
+      totalPrice += lastPrices.binance * 0.5;
       totalWeight += 0.5;
     }
     
     // Get Pyth price (lower weight but reliable)
-    const pythData = this.priceCache.get('BTC_PYTH');
+    const pythData = this.priceCache.get(`${symbol}_PYTH`);
     if (pythData && (Date.now() - pythData.timestamp) < 10000) { // Fresh if < 10 seconds
       totalPrice += pythData.price * 0.3; // 30% weight
       totalWeight += 0.3;
-    } else if (this.lastPythPrice > 0) {
+    } else if (lastPrices.pyth > 0) {
       // Use last known Pyth price with reduced weight
-      totalPrice += this.lastPythPrice * 0.2;
+      totalPrice += lastPrices.pyth * 0.2;
       totalWeight += 0.2;
     }
     
@@ -306,15 +515,21 @@ class HybridPriceManager extends EventEmitter {
     }
     
     // Fallback to any available price
-    return this.lastBinancePrice || this.lastPythPrice || 65000;
+    const fallbackPrice = lastPrices.binance || lastPrices.pyth;
+    if (fallbackPrice > 0) {
+      return fallbackPrice;
+    }
+    
+    // Ultimate fallback (only for BTC)
+    return symbol === 'BTC' ? 65000 : 0;
   }
   
-  // Calculate confidence level based on data freshness
-  private calculateConfidence(): number {
+  // Calculate confidence level based on data freshness for a specific token
+  private calculateConfidence(symbol: string): number {
     let confidence = 0;
     
-    const binanceData = this.priceCache.get('BTC_BINANCE');
-    const pythData = this.priceCache.get('BTC_PYTH');
+    const binanceData = this.priceCache.get(`${symbol}_BINANCE`);
+    const pythData = this.priceCache.get(`${symbol}_PYTH`);
     
     if (binanceData && (Date.now() - binanceData.timestamp) < 1000) {
       confidence += 50;
@@ -327,51 +542,60 @@ class HybridPriceManager extends EventEmitter {
     return confidence;
   }
   
-  // Fetch initial prices from both sources
+  // Fetch initial prices from both sources for all registered tokens
   private async fetchInitialPrices() {
     console.log('📡 Fetching initial prices...');
     
-    // Fetch from Pyth
-    await this.fetchPythPrice();
+    const tokens = Array.from(this.registeredTokens.values());
     
-    // Fetch from Binance REST API as backup
-    try {
-      const response = await axios.get('https://api.binance.com/api/v3/ticker/price', {
-        params: { symbol: 'BTCUSDT' },
-        timeout: 5000
-      });
-      
-      const price = parseFloat(response.data.price);
-      
-      if (price > 0) {
-        this.lastBinancePrice = price;
-        this.priceCache.set('BTC_BINANCE', {
-          price,
-          timestamp: Date.now(),
-          source: 'binance'
+    // Fetch from Pyth
+    await this.fetchPythPrices();
+    
+    // Fetch from Binance REST API as backup for each token
+    for (const tokenConfig of tokens) {
+      try {
+        const response = await axios.get('https://api.binance.com/api/v3/ticker/price', {
+          params: { symbol: tokenConfig.binanceSymbol },
+          timeout: 5000
         });
         
-        console.log(`💰 Initial Binance BTC Price: $${price.toFixed(2)}`);
-      }
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        console.error('Error fetching initial Binance price:', error.message);
-      } else if (error instanceof Error) {
-        console.error('Error fetching initial Binance price:', error.message);
-      } else {
-        console.error('Error fetching initial Binance price:', String(error));
+        const price = parseFloat(response.data.price);
+        
+        if (price > 0) {
+          const lastPrices = this.lastPrices.get(tokenConfig.symbol) || { binance: 0, pyth: 0 };
+          lastPrices.binance = price;
+          this.lastPrices.set(tokenConfig.symbol, lastPrices);
+          
+          this.priceCache.set(`${tokenConfig.symbol}_BINANCE`, {
+            price,
+            timestamp: Date.now(),
+            source: 'binance'
+          });
+          
+          console.log(`💰 Initial Binance ${tokenConfig.symbol} Price: $${price.toFixed(2)}`);
+        }
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          console.error(`Error fetching initial Binance price for ${tokenConfig.symbol}:`, error.message);
+        } else if (error instanceof Error) {
+          console.error(`Error fetching initial Binance price for ${tokenConfig.symbol}:`, error.message);
+        } else {
+          console.error(`Error fetching initial Binance price for ${tokenConfig.symbol}:`, String(error));
+        }
       }
     }
     
-    // Set initial hybrid price
-    const hybridPrice = this.calculateHybridPrice();
-    if (hybridPrice > 0) {
-      this.priceCache.set('BTC', {
-        price: hybridPrice,
-        timestamp: Date.now(),
-        source: 'hybrid'
-      });
-    }
+    // Set initial hybrid prices for all tokens
+    tokens.forEach(tokenConfig => {
+      const hybridPrice = this.calculateHybridPrice(tokenConfig.symbol);
+      if (hybridPrice > 0) {
+        this.priceCache.set(tokenConfig.symbol, {
+          price: hybridPrice,
+          timestamp: Date.now(),
+          source: 'hybrid'
+        });
+      }
+    });
   }
   
   // Save price to database
@@ -404,7 +628,7 @@ class HybridPriceManager extends EventEmitter {
     }
     
     // Calculate fresh hybrid price
-    const hybridPrice = this.calculateHybridPrice();
+    const hybridPrice = this.calculateHybridPrice(symbol);
     
     if (hybridPrice > 0) {
       const newPrice = {
@@ -418,8 +642,11 @@ class HybridPriceManager extends EventEmitter {
     }
     
     // Ultimate fallback
+    const lastPrices = this.lastPrices.get(symbol) || { binance: 0, pyth: 0 };
+    const fallbackPrice = lastPrices.binance || lastPrices.pyth || (symbol === 'BTC' ? 111443.50 : 0);
+    
     const defaultPrice = { 
-      price: this.lastBinancePrice || this.lastPythPrice || 111443.50, 
+      price: fallbackPrice, 
       timestamp: Date.now(),
       source: 'fallback'
     };
@@ -496,6 +723,13 @@ class HybridPriceManager extends EventEmitter {
       console.log('⏹️ Stopped hybrid price updates');
     }
     
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    
+    this.isReconnecting = false;
+    
     if (this.binanceWs) {
       this.binanceWs.close();
       this.binanceWs = null;
@@ -511,22 +745,34 @@ class HybridPriceManager extends EventEmitter {
   
   // Get cache stats for monitoring
   public getCacheStats() {
-    const btcPrice = this.priceCache.get('BTC');
-    const binanceData = this.priceCache.get('BTC_BINANCE');
-    const pythData = this.priceCache.get('BTC_PYTH');
-    
-    return {
+    const tokens = Array.from(this.registeredTokens.keys());
+    const stats: any = {
       cachedSymbols: Array.from(this.priceCache.keys()),
       lockedPricesCount: this.lockedPrices.size,
-      hybridPrice: btcPrice?.price,
-      binancePrice: this.lastBinancePrice,
-      pythPrice: this.lastPythPrice,
-      lastUpdate: btcPrice?.timestamp ? new Date(btcPrice.timestamp).toISOString() : null,
-      priceAge: btcPrice ? Date.now() - btcPrice.timestamp : null,
-      binanceAge: binanceData ? Date.now() - binanceData.timestamp : null,
-      pythAge: pythData ? Date.now() - pythData.timestamp : null,
-      confidence: this.calculateConfidence()
+      registeredTokens: tokens,
+      tokens: {}
     };
+    
+    // Get stats for each registered token
+    tokens.forEach(symbol => {
+      const hybridPrice = this.priceCache.get(symbol);
+      const binanceData = this.priceCache.get(`${symbol}_BINANCE`);
+      const pythData = this.priceCache.get(`${symbol}_PYTH`);
+      const lastPrices = this.lastPrices.get(symbol) || { binance: 0, pyth: 0 };
+      
+      stats.tokens[symbol] = {
+        hybridPrice: hybridPrice?.price,
+        binancePrice: lastPrices.binance,
+        pythPrice: lastPrices.pyth,
+        lastUpdate: hybridPrice?.timestamp ? new Date(hybridPrice.timestamp).toISOString() : null,
+        priceAge: hybridPrice ? Date.now() - hybridPrice.timestamp : null,
+        binanceAge: binanceData ? Date.now() - binanceData.timestamp : null,
+        pythAge: pythData ? Date.now() - pythData.timestamp : null,
+        confidence: this.calculateConfidence(symbol)
+      };
+    });
+    
+    return stats;
   }
   
   // Test connections

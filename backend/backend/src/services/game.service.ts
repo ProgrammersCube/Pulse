@@ -14,6 +14,7 @@ interface CreateBetRequest {
   direction: BetDirection;
   amount: number;
   token: string;
+  predictionToken: string;
   duration: number;
   transactionSignature?: string; // For SPL token transfers
 }
@@ -78,7 +79,7 @@ class GameService extends EventEmitter {
   
   // In game.service.ts - Update the createBet method
 async createBet(request: CreateBetRequest): Promise<IBet> {
-  const { userId, direction, amount, token, duration, transactionSignature } = request;
+  const { userId, direction, amount, token, predictionToken, duration, transactionSignature } = request;
   const blockchainService = getBlockchainService();
   const settings = await Settings.findOne();
   if (!settings) {
@@ -102,6 +103,7 @@ async createBet(request: CreateBetRequest): Promise<IBet> {
     direction,
     amount,
     token,
+    predictionToken,
     duration,
     transactionSignature: transactionSignature ? 'PROVIDED' : 'MISSING'
   });
@@ -177,10 +179,10 @@ async createBet(request: CreateBetRequest): Promise<IBet> {
   console.log(`Transaction already completed: ${amount} ${token} from ${userId} to house`);
   console.log(`Transaction signature: ${transactionSignature}`);
   
-  // Lock the current price
+  // Lock the current price for the prediction token
   const priceManager = getPythPriceManager();
   const lockedPrice = priceManager.lockPrice({
-    symbol: 'BTC',
+    symbol: predictionToken || 'BTC', // Default to BTC if not provided
     userId,
     betId
   });
@@ -192,6 +194,7 @@ async createBet(request: CreateBetRequest): Promise<IBet> {
     direction,
     amount,
     token,
+    predictionToken: predictionToken || 'BTC', // Default to BTC if not provided
     duration,
     lockedPrice: lockedPrice.price,
     lockedAt: new Date(lockedPrice.timestamp),
@@ -282,16 +285,19 @@ async completeGame(betId: string): Promise<GameResult> {
       } as GameResult;
     }
     
-    // Get current price
+    // Get current price for the prediction token
     const priceManager = getPythPriceManager();
-    const currentPrice = priceManager.getLatestPrice('BTC');
+    const predictionToken = bet.predictionToken || 'BTC'; // Default to BTC if not set
+    const currentPrice = priceManager.getLatestPrice(predictionToken);
     
     bet.finalPrice = currentPrice.price;
+    
+    console.log(`📊 Final price fetched for ${predictionToken}: ${currentPrice.price}`);
     bet.finalizedAt = new Date();
     
     // Determine result FIRST
     const priceChange = bet.finalPrice - bet.lockedPrice;
-    console.log(`📊 Price change calculation:
+    console.log(`📊 Price change calculation for ${predictionToken}:
       - Locked Price: ${bet.lockedPrice}
       - Final Price: ${bet.finalPrice}
       - Change: ${priceChange}

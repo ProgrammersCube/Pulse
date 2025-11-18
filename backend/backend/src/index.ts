@@ -32,6 +32,10 @@ import adminRoutes from './routes/admin.routes';
 // Import socket controller
 import { setupSocketControllers } from './controllers/socket.controller';
 
+// Import Swagger
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './config/swagger';
+
 // Load environment variables
 // dotenv.config();
 
@@ -44,7 +48,7 @@ const io = new SocketServer(server, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
       ? process.env.FRONTEND_PRODUCTION_URL 
-      :"http://localhost:3000",
+      :"*",
     methods: ['GET', 'POST'],
     credentials: true
   },
@@ -63,7 +67,7 @@ app.use(helmet({
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? process.env.FRONTEND_PRODUCTION_URL
-    :"http://localhost:3000",
+    : ["http://localhost:3000", "http://localhost:5000", "http://localhost:7000"], // Allow common dev ports
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -72,22 +76,74 @@ app.use(cors({
 app.use(express.json());
 app.use(morgan('dev'));
 
+// Swagger Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Pulse API Documentation'
+}));
+
 // Routes
 app.use('/api/wallet', walletRoutes);
 app.use('/api/price', priceRoutes);
 app.use('/api/game', gameRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Health check endpoint
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: Health check endpoint
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: Server is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 environment:
+ *                   type: string
+ *                   example: development
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ */
 app.get('/health', (req, res) => {
   res.status(200).json({ 
-    status: 'ok', 
+    status: 'okk', 
     environment: process.env.NODE_ENV,
     timestamp: new Date().toISOString()
   });
 });
 
-// Root endpoint
+/**
+ * @swagger
+ * /:
+ *   get:
+ *     summary: Root endpoint
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: API server information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Pulse API Server
+ *                 version:
+ *                   type: string
+ *                   example: 1.0.0
+ *                 environment:
+ *                   type: string
+ *                   example: development
+ */
 app.get('/', (req, res) => {
   res.status(200).json({ 
     message: 'Pulse API Server',
@@ -107,6 +163,7 @@ mongoose
     server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
       
       // Display CORS configuration
       const allowedOrigin = process.env.NODE_ENV === 'production' 

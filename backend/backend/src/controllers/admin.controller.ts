@@ -1042,6 +1042,113 @@ export const getNetRevenueAnalytics = async (req: Request, res: Response): Promi
   }
 };
 
+// Get Prediction Token Stats
+export const getPredictionTokenStats = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { timePeriod = 'ALL' } = req.query;
+    
+    // Calculate date filter based on time period
+    let dateFilter = {};
+    const now = new Date();
+    
+    switch (timePeriod) {
+      case '1D':
+        dateFilter = { finalizedAt: { $gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) } };
+        break;
+      case '1W':
+        dateFilter = { finalizedAt: { $gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) } };
+        break;
+      case '1M':
+        dateFilter = { finalizedAt: { $gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) } };
+        break;
+      case 'ALL':
+      default:
+        dateFilter = {};
+        break;
+    }
+
+    // Get stats grouped by predictionToken
+    const tokenStats = await Bet.aggregate([
+      { $match: { status: 'COMPLETED', ...dateFilter } },
+      {
+        $addFields: {
+          predictionToken: {
+            $ifNull: ['$predictionToken', 'BTC']
+          }
+        }
+      },
+      {
+        $group: {
+          _id: '$predictionToken',
+          totalBets: { $sum: 1 },
+          totalVolume: { $sum: '$amount' },
+          totalWins: { 
+            $sum: { 
+              $cond: [{ $eq: ['$result', 'WIN'] }, '$amount', 0] 
+            } 
+          },
+          totalLosses: { 
+            $sum: { 
+              $cond: [{ $eq: ['$result', 'LOSS'] }, '$amount', 0] 
+            } 
+          },
+          winCount: { 
+            $sum: { 
+              $cond: [{ $eq: ['$result', 'WIN'] }, 1, 0] 
+            } 
+          },
+          lossCount: { 
+            $sum: { 
+              $cond: [{ $eq: ['$result', 'LOSS'] }, 1, 0] 
+            } 
+          }
+        }
+      },
+      {
+        $addFields: {
+          winRate: {
+            $cond: [
+              { $gt: ['$totalBets', 0] },
+              { $multiply: [{ $divide: ['$winCount', '$totalBets'] }, 100] },
+              0
+            ]
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          predictionToken: {
+            $ifNull: ['$_id', 'BTC']
+          },
+          totalBets: 1,
+          totalVolume: 1,
+          totalWins: 1,
+          totalLosses: 1,
+          winCount: 1,
+          lossCount: 1,
+          winRate: { $round: ['$winRate', 2] }
+        }
+      },
+      {
+        $sort: { totalVolume: -1 }
+      }
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: 'Prediction token stats retrieved successfully',
+      data: {
+        tokenStats,
+        timePeriod
+      }
+    });
+  } catch (error) {
+    console.error('Get prediction token stats error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 // Create ambassador
 export const createAmbassador = async (req: Request, res: Response): Promise<void> => {
   try {
