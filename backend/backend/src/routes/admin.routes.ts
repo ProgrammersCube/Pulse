@@ -272,7 +272,7 @@ router.post("/commission-history",ambassadorAuth,getCommissionHistory)
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/settings', adminAuth, getSettings);
+router.get('/settings', getSettings);
 
 /**
  * @swagger
@@ -520,8 +520,6 @@ router.post('/ambassadors', adminAuth, createAmbassador);
  *   get:
  *     summary: Get all ambassadors
  *     tags: [Admin]
- *     security:
- *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Ambassadors retrieved successfully
@@ -536,12 +534,6 @@ router.post('/ambassadors', adminAuth, createAmbassador);
  *                   type: array
  *                   items:
  *                     $ref: '#/components/schemas/Ambassador'
- *       401:
- *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
  */
 router.get('/ambassadors', getAmbassadors);
 
@@ -600,6 +592,8 @@ router.delete('/ambassadors/:id', adminAuth, deleteAmbassador);
  *     responses:
  *       200:
  *         description: Earnings calculated successfully
+ *     security:
+ *       - bearerAuth: []
  */
 router.post('/ambassadors/:ambassadorId/calculate-earnings', calculateAmbassadorEarnings);
 
@@ -609,6 +603,17 @@ router.post('/ambassadors/:ambassadorId/calculate-earnings', calculateAmbassador
  *   post:
  *     summary: Get ambassador dashboard statistics
  *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - ambassadorId
+ *             properties:
+ *               ambassadorId:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Ambassador dashboard stats retrieved successfully

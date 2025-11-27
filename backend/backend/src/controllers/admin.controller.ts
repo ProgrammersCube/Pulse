@@ -1568,7 +1568,13 @@ export const changeAmbassadorPayoutWallet = async (req: any, res: any) => {
 export const ambassadarDassboardStats = async (req: any, res: any) => {
   try {
     console.log(req.body);
-    const { ambassadorId } = req.body;
+    const { ambassadorId } = req.body || {};
+
+    if (!ambassadorId) {
+      res.status(400).json({ success: false, message: 'ambassadorId is required' });
+      return;
+    }
+
     console.log(ambassadorId);
     const ambassador = await Ambassador.findById(ambassadorId);
     if (!ambassador) {
