@@ -67,7 +67,7 @@ app.use(helmet({
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? process.env.FRONTEND_PRODUCTION_URL
-    : ["http://localhost:3000", "http://localhost:5000", "http://localhost:7000"], // Allow common dev ports
+    : "*", // Allow common dev ports
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
