@@ -6,6 +6,7 @@ interface ITokens {
   SOL: number;
   ETH: number;
   RADBRO: number;
+  USDC: number;
 }
 
 // User interface
@@ -23,6 +24,7 @@ export interface IUser extends Document {
     SOL: number;
     ETH: number;
     RADBRO: number;
+    USDC: number;
   };
   isAmbassador: boolean;
   userName:string;
@@ -39,7 +41,8 @@ const userSchema = new Schema<IUser>(
       BeTyche: { type: Number, default: 0, min: 0 },
       SOL: { type: Number, default: 0, min: 0 },
       ETH: { type: Number, default: 0, min: 0 },
-      RADBRO: { type: Number, default: 0, min: 0 }
+      RADBRO: { type: Number, default: 0, min: 0 },
+      USDC: { type: Number, default: 0, min: 0 }
     },
     isAmbassador: { type: Boolean, default: false },
     walletAddress: {
@@ -70,6 +73,11 @@ const userSchema = new Schema<IUser>(
         min: 0
       },
       RADBRO: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      USDC: {
         type: Number,
         default: 0,
         min: 0
@@ -128,14 +136,16 @@ userSchema.virtual('totalValue').get(function() {
     BeTyche: 0.01, // Example rate
     SOL: 100,      // Example rate
     ETH: 2000,     // Example rate
-    RADBRO: 0.005  // Example rate
+    RADBRO: 0.005,  // Example rate
+    USDC: 1        // Stablecoin approx to USD
   };
   
   return (
     this.tokens.BeTyche * rates.BeTyche +
     this.tokens.SOL * rates.SOL +
     this.tokens.ETH * rates.ETH +
-    this.tokens.RADBRO * rates.RADBRO
+    this.tokens.RADBRO * rates.RADBRO +
+    this.tokens.USDC * rates.USDC
   );
 });
 

@@ -13,6 +13,7 @@ export interface ISettings extends Document {
     SOL: boolean;
     ETH: boolean;
     RADBRO: boolean;
+    USDC: boolean;
   };
   
   // Prediction Tokens Configuration
@@ -38,6 +39,7 @@ export interface ISettings extends Document {
     SOL: { min: number; max: number };
     ETH: { min: number; max: number };
     RADBRO: { min: number; max: number };
+    USDC: { min: number; max: number };
   };
   bettingMode: string;
   enableHouseBotFallback: boolean;
@@ -72,7 +74,8 @@ const settingsSchema = new Schema<ISettings>({
     BeTyche: { type: Boolean, default: true },
     SOL: { type: Boolean, default: true },
     ETH: { type: Boolean, default: false },
-    RADBRO: { type: Boolean, default: true }
+    RADBRO: { type: Boolean, default: true },
+    USDC: { type: Boolean, default: true }
   },
   
   predictionTokens: {
@@ -127,6 +130,11 @@ const settingsSchema = new Schema<ISettings>({
     RADBRO: {
       min: { type: Number, default: 100 },
       max: { type: Number, default: 10000000 }
+    },
+    USDC: {
+      // Reasonable default USDC limits; admins can adjust
+      min: { type: Number, default: 0.1 },
+      max: { type: Number, default: 10000 }
     }
   },
   bettingMode:{

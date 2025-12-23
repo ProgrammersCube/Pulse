@@ -35,7 +35,8 @@ class GameService extends EventEmitter {
     BeTyche: 100,
     SOL: 0.00001,
     ETH: 0.001,
-    RADBRO: 100
+    RADBRO: 100,
+    USDC: 0.01
   };
 
   // Helper method to get current house wallet address
@@ -65,7 +66,8 @@ class GameService extends EventEmitter {
     BeTyche: 1000000,
     SOL: 100,
     ETH: 10,
-    RADBRO: 10000000
+    RADBRO: 10000000,
+    USDC: 10000
   };
   
   private activeGames: Map<string, NodeJS.Timeout> = new Map();
@@ -495,7 +497,36 @@ async completeGame(betId: string): Promise<GameResult> {
         amount: priceChange,
         percentage: ((priceChange / bet.lockedPrice) * 100).toFixed(2),
         direction: priceChange >= 0 ? 'UP' : 'DOWN'
-      }
+      },
+
+
+
+
+
+      // 🔽 ADD THESE FIELDS 🔽
+
+  // core bet info UI relies on
+  userId: bet.userId,
+  opponentId: bet.opponentId || 'HOUSE_BOT',
+  amount: bet.amount,
+  token: bet.token,
+  lockedPrice: bet.lockedPrice,
+  fee: bet.fee || 0,
+
+  // explicit signatures for the blockchain section
+  transferToHouseSignature:
+    bet.metadata?.transferToHouseSignature || transferSignature || '',
+  payoutTransferSignature:
+    bet.metadata?.payoutTransferSignature || '',
+
+  // winner/loser used for "Match Result" text
+  winner: bet.result === BetResult.WIN ? bet.userId : (bet.opponentId || 'HOUSE_BOT'),
+  loser:  bet.result === BetResult.WIN ? (bet.opponentId || 'HOUSE_BOT') : bet.userId,
+
+  // optional but useful
+  status: bet.status,
+  timestamp: bet.finalizedAt || new Date().toISOString(),
+  metadata: bet.metadata || {}
     });
     
     console.log(`🏆 Game completed with REAL blockchain transfers: ${betId}, Result: ${result}`);

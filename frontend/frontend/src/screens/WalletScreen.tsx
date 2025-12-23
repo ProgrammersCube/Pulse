@@ -72,7 +72,7 @@ const WalletScreen: React.FC = () => {
               </div>
               
               <div style={{ marginBottom: '15px' }}>
-                <h4>Token Balances:</h4>
+                <h4>Token Balancess:</h4>
                 <div style={{ 
                   display: 'grid', 
                   gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
@@ -99,6 +99,10 @@ const WalletScreen: React.FC = () => {
                       <div className="token-balance" style={{ padding: '12px' }}>
                         <span className="token-icon">R</span>
                         <span>RADBRO: {user.tokens.RADBRO.toFixed(2)}</span>
+                      </div>
+                      <div className="token-balance" style={{ padding: '12px' }}>
+                        <span className="token-icon">U</span>
+                        <span>USDC: {user.tokens.USDC.toFixed(2)}</span>
                       </div>
                     </>
                   )}

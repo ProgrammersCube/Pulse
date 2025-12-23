@@ -82,7 +82,7 @@ const betSchema = new Schema<IBet>({
   token: {
     type: String,
     required: true,
-    enum: ['BeTyche', 'SOL', 'ETH', 'RADBRO']
+    enum: ['BeTyche', 'SOL', 'ETH', 'RADBRO','USDC']
   },
   predictionToken: {
     type: String,
