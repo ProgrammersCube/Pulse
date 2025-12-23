@@ -14,7 +14,7 @@ Pulse is a crypto-based micro prediction game where users can predict price move
 - **Multi-Token Price Predictions** - Predict UP/DOWN movements for top 10 cryptocurrencies (BTC, ETH, SOL, DOGE, AVAX, LINK, XRP, MATIC, TON, BNB) with 10-60 second durations
 - **Token Selection** - Choose which crypto token to predict with dynamic dropdown selection
 - **Hybrid Oracle Engine** - Pyth Network + Binance WebSocket hybrid price feeds for all supported tokens
-- **Multi-token Betting** - Bet with BeTyche, SOL, ETH, and RADBRO tokens
+- **Multi-token Betting** - Bet with BeTyche, SOL, USDC, and RADBRO tokens
 - **P2P Matchmaking** - Automated player matching with treasury-bot fallback
 - **Live Price Feeds** - Real-time price data from Pyth Network for all prediction tokens
 - **Instant Results** - Fast game resolution with immediate payouts
@@ -182,7 +182,7 @@ Pulse_Updated/
 ## 🎮 How to Play
 
 1. **Connect Wallet** - Link your Solana or Ethereum wallet
-2. **Fund Account** - Deposit tokens (BeTyche, SOL, ETH, RADBRO)
+2. **Fund Account** - Deposit tokens (BeTyche, SOL, USDC, RADBRO)
 3. **Choose Prediction Token** - Select which cryptocurrency to predict (BTC, ETH, SOL, DOGE, AVAX, LINK, XRP, MATIC, TON, BNB)
 4. **Set Prediction** - Choose UP or DOWN for the selected token's price
 5. **Set Duration** - Select prediction timeframe (10-60 seconds)

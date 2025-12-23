@@ -123,9 +123,12 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
           // Testnet token addresses (you'll need to deploy these or use existing testnet tokens)
           BeTyche: new PublicKey('11111111111111111111111111111111'), // Placeholder
           RADBRO: new PublicKey('11111111111111111111111111111111'), // Placeholder
+          // USDC testnet mint – replace with correct mint if you deploy/choose a specific USDC
+          USDC: new PublicKey(process.env.SOLANA_USDC_TESTNET_MINT || '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU')
         }
       };
     } else {
+      console.log("mainnet-beta",process.env.SOLANA_RPC_URL);
       return {
         network: 'mainnet-beta',
         rpcUrl: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
@@ -133,6 +136,8 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
         tokenMints: {
           BeTyche: new PublicKey('EydjnYHVeCQGihcvA22vBDCxn5HzBrXoQpP98kL9Koyp'),
           RADBRO: new PublicKey('287XY2FcGAE5ty4PZVjg22eqx37sEmzP8jPK3GxFofqB'),
+          // Solana USDC mainnet SPL mint
+          USDC: new PublicKey(process.env.SOLANA_USDC_MAINNET_MINT || 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
         }
       };
     }
@@ -142,6 +147,12 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
   
   // SPL Token Mint Addresses - Now environment-based
   const TOKEN_MINTS = getNetworkConfig().tokenMints;
+  // Per-token decimal configuration (default 9 for SPL tokens, 6 for USDC)
+  const TOKEN_DECIMALS: Record<string, number> = {
+    BeTyche: 9,
+    RADBRO: 9,
+    USDC: 6
+  };
   
   interface TransferResult {
     success: boolean;
@@ -327,7 +338,8 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
       }
       
       const userPublicKey = new PublicKey(userWalletAddress);
-      const tokenAmount = Math.floor(amount * Math.pow(10, 9)); // Assuming 9 decimals
+      const decimals = TOKEN_DECIMALS[token] ?? 9;
+      const tokenAmount = Math.floor(amount * Math.pow(10, decimals));
       
       // Get associated token accounts
       const userTokenAccount = await getAssociatedTokenAddress(
@@ -395,7 +407,8 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
       }
       
       const userPublicKey = new PublicKey(userWalletAddress);
-      const tokenAmount = Math.floor(amount * Math.pow(10, 9)); // Assuming 9 decimals
+      const decimals = TOKEN_DECIMALS[token] ?? 9;
+      const tokenAmount = Math.floor(amount * Math.pow(10, decimals)); // token-specific decimals
       
       // Get associated token accounts
       const userTokenAccount = await getAssociatedTokenAddress(
@@ -477,7 +490,8 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
           
           try {
             const accountInfo = await getAccount(this.connection, tokenAccount);
-            return Number(accountInfo.amount) / Math.pow(10, 9);
+            const decimals = TOKEN_DECIMALS[token] ?? 9;
+            return Number(accountInfo.amount) / Math.pow(10, decimals);
           } catch (error) {
             // Account doesn't exist
             return 0;
@@ -799,6 +813,8 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
           return false;
         }
         
+        const expectedMintString = tokenMint.toBase58();
+        
         // Parse token transfer from transaction
         const postTokenBalances = transaction.meta?.postTokenBalances || [];
         const preTokenBalances = transaction.meta?.preTokenBalances || [];
@@ -812,9 +828,10 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
           if (!preBalance) continue;
           
           const owner = postBalance.owner;
-          const mint = postBalance.mint;
+          const mint = postBalance.mint; // string base58 mint
           
-          if (mint !== tokenMint) continue;
+          // Only consider balances for the expected token mint
+          if (mint !== expectedMintString) continue;
           
           const change = Number(postBalance.uiTokenAmount.amount) - Number(preBalance.uiTokenAmount.amount);
           
@@ -840,9 +857,9 @@ import { getActiveWalletKeys } from '../controllers/admin.controller';
         }
         
         debugLog('✅ SPL token transfer verified');
-    return true;
-    
-  } catch (error) {
+        return true;
+        
+      } catch (error) {
         console.error('❌ Error verifying SPL token transfer:', error);
         return false;
       }

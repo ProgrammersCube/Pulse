@@ -1217,7 +1217,8 @@ const Header = () => {
                                 { symbol: 'BeTyche', short: 'B', amount: user.tokens.BeTyche || 0, color: 'cyan' },
                                 { symbol: 'SOL', short: 'S', amount: user.tokens.SOL || 0, color: 'blue' },
                                 { symbol: 'ETH', short: 'E', amount: user.tokens.ETH || 0, color: 'purple' },
-                                { symbol: 'RADBRO', short: 'R', amount: user.tokens.RADBRO || 0, color: 'pink' }
+                                { symbol: 'RADBRO', short: 'R', amount: user.tokens.RADBRO || 0, color: 'pink' },
+                                { symbol: 'USDC', short: 'U', amount: user.tokens.USDC || 0, color: 'cyan' }
                               ].map((token, index) => (
                                 <motion.div 
                                   key={token.symbol}
@@ -1737,7 +1738,8 @@ const GameSetupScreen = ({ showToast }) => {
     BeTyche: { enabled: true },
     SOL: { enabled: true },
     ETH: { enabled: true },
-    RADBRO: { enabled: true }
+    RADBRO: { enabled: true },
+    USDC: { enabled: true }
   });
   
   // Dynamic token limits - will be fetched from admin settings
@@ -1745,7 +1747,8 @@ const GameSetupScreen = ({ showToast }) => {
     BeTyche: { min: 100, max: 1000000, enabled: false },
     SOL: { min: 0.00001, max: 100, enabled: true },
     ETH: { min: 0.001, max: 10, enabled: false },
-    RADBRO: { min: 100, max: 10000000, enabled: false }
+    RADBRO: { min: 100, max: 10000000, enabled: false },
+    USDC: { min: 1, max: 10000, enabled: false }
   });
   
   // House fee percentage state
@@ -1775,28 +1778,43 @@ const GameSetupScreen = ({ showToast }) => {
       
       if (data.success && data.data) {
         const settings = data.data;
-        
+        console.log("settings",settings.enabledTokens["USDC"]);
         // Map API response to token limits format
         const dynamicLimits = {
           BeTyche: { 
             min: settings.betLimits?.BeTyche?.min || 100, 
             max: settings.betLimits?.BeTyche?.max || 1000000, 
-            enabled: settings.enabledTokens?.BeTyche || true 
+            enabled: settings.enabledTokens["BeTyche"] !== undefined
+            ? settings.enabledTokens["BeTyche"]
+            : true
           },
           SOL: { 
             min: settings.betLimits?.SOL?.min || 0.00001, 
             max: settings.betLimits?.SOL?.max || 100, 
-            enabled: settings.enabledTokens?.SOL || true 
+            enabled:  settings.enabledTokens["SOL"] !== undefined
+            ? settings.enabledTokens["SOL"]
+            : true
           },
           ETH: { 
             min: settings.betLimits?.ETH?.min || 0.001, 
             max: settings.betLimits?.ETH?.max || 10, 
-            enabled: settings.enabledTokens?.ETH || false 
+            enabled: settings.enabledTokens["ETH"] !== undefined
+            ? settings.enabledTokens["ETH"]
+            : true
           },
           RADBRO: { 
             min: settings.betLimits?.RADBRO?.min || 100, 
             max: settings.betLimits?.RADBRO?.max || 10000000, 
-            enabled: settings.enabledTokens?.RADBRO || true 
+            enabled: settings.enabledTokens["RADBRO"] !== undefined
+            ? settings.enabledTokens["RADBRO"]
+            : true
+          },
+          USDC: {
+            min: settings.betLimits?.USDC?.min || 1,
+            max: settings.betLimits?.USDC?.max || 10000,
+            enabled: settings.enabledTokens["USDC"] !== undefined
+            ? settings.enabledTokens["USDC"]
+            : true
           }
         };
         // Map API response to token status format
@@ -1804,7 +1822,8 @@ const GameSetupScreen = ({ showToast }) => {
           BeTyche: { enabled: settings.enabledTokens?.BeTyche || true },
           SOL: { enabled: settings.enabledTokens?.SOL || true },
           ETH: { enabled: settings.enabledTokens?.ETH || false },
-          RADBRO: { enabled: settings.enabledTokens?.RADBRO || true }
+          RADBRO: { enabled: settings.enabledTokens?.RADBRO || true },
+          USDC: { enabled: settings.enabledTokens?.USDC || true }
         };
         
         setTokenLimits(dynamicLimits);
@@ -5147,6 +5166,17 @@ const HomeScreen = () => {
             >
               RADBRO on DEXScreener
             </motion.a>
+            <motion.a 
+              href="https://explorer.solana.com/address/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="neon-button neon-button-pink"
+              style={{ padding: '10px 25px' }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              USDC on Sol Explorer
+            </motion.a>
           </div>
         </div>
       </motion.div>
@@ -5271,7 +5301,7 @@ const WalletScreen = () => {
               // Fetch token status for display
       const fetchTokenStatus = async () => {
         try {
-          const tokens = ['BeTyche', 'SOL', 'ETH', 'RADBRO'];
+          const tokens = ['BeTyche', 'SOL', 'ETH', 'RADBRO','USDC'];
           const newTokenStatus = {};
           
           // Define appropriate test amounts for each token
@@ -5279,7 +5309,8 @@ const WalletScreen = () => {
             'BeTyche': 1000,
             'SOL': 0.00001,
             'ETH': 0.001,
-            'RADBRO': 1000
+            'RADBRO': 1000,
+            'USDC': 0.1
           };
           
           for (const token of tokens) {
@@ -5366,7 +5397,8 @@ const WalletScreen = () => {
                         { name: 'BeTyche', short: 'B', amount: user.tokens.BeTyche || 0, color: 'cyan' },
                         { name: 'SOL', short: 'S', amount: user.tokens.SOL || 0, color: 'blue' },
                         { name: 'ETH', short: 'E', amount: user.tokens.ETH || 0, color: 'purple' },
-                        { name: 'RADBRO', short: 'R', amount: user.tokens.RADBRO || 0, color: 'pink' }
+                        { name: 'RADBRO', short: 'R', amount: user.tokens.RADBRO || 0, color: 'pink' },
+                        { name: 'USDC', short: 'U', amount: user.tokens.USDC || 0, color: 'cyan' }
                       ].map((token, index) => {
                         const isEnabled = tokenStatus[token.name]?.enabled;
                         return (

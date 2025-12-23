@@ -482,8 +482,7 @@ export const getWalletBalances = async (req: any, res: any) => {
     
     // Fetch balances for SOL, BeTyche, and RADBRO
     const balances: Record<string, number> = {};
-    const supportedTokens = ['SOL', 'BeTyche', 'RADBRO'];
-    
+    const supportedTokens = ['SOL', 'BeTyche', 'RADBRO','USDC'];
     console.log('💰 Fetching balances for tokens:', supportedTokens);
     
     for (const token of supportedTokens) {
@@ -929,7 +928,7 @@ export const getNetRevenueAnalytics = async (req: Request, res: Response): Promi
     ]);
 
     // Ensure all three tokens are present, even with zero values
-    const allTokens = ['SOL', 'BeTyche', 'RADBRO'];
+    const allTokens = ['SOL', 'BeTyche', 'RADBRO','USDC'];
     const tokenMap = new Map();
     
     // Create map from existing data

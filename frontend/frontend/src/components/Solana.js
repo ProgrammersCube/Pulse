@@ -20,14 +20,16 @@ import {
     if (isTestnet) {
       return {
         network: 'testnet',
-        rpcUrl: process.env.REACT_APP_SOLANA_RPC_URL || 'https://api.testnet.solana.com',
+        rpcUrl: process.env.REACT_APP_SOLANA_RPC_URL || 'https://api.devnet.solana.com',
         heliusRpcUrl: process.env.REACT_APP_HELIUS_API_KEY 
           ? `https://testnet.helius-rpc.com/?api-key=${process.env.REACT_APP_HELIUS_API_KEY}`
-          : 'https://api.testnet.solana.com', // Fallback to public testnet RPC
+          : 'https://api.devnet.solana.com', // Fallback to public testnet RPC
         tokenMints: {
           // Testnet token addresses (you'll need to deploy these or use existing testnet tokens)
           BeTyche: '11111111111111111111111111111111', // Placeholder
           RADBRO: '11111111111111111111111111111111', // Placeholder
+          // USDC testnet mint – override via REACT_APP_SOLANA_USDC_TESTNET_MINT if needed
+          USDC: process.env.REACT_APP_SOLANA_USDC_TESTNET_MINT || '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'
         }
       };
     } else {
@@ -37,7 +39,9 @@ import {
         heliusRpcUrl: `https://mainnet.helius-rpc.com/?api-key=${process.env.REACT_APP_HELIUS_API_KEY || '92d6abbc-1969-4f81-8a8d-4633756797f4'}`,
         tokenMints: {
           BeTyche: 'EydjnYHVeCQGihcvA22vBDCxn5HzBrXoQpP98kL9Koyp',
-          RADBRO: '287XY2FcGAE5ty4PZVjg22eqx37sEmzP8jPK3GxFofqB'
+          RADBRO: '287XY2FcGAE5ty4PZVjg22eqx37sEmzP8jPK3GxFofqB',
+          // Solana USDC mainnet SPL mint – override via REACT_APP_SOLANA_USDC_MAINNET_MINT if needed
+          USDC: process.env.REACT_APP_SOLANA_USDC_MAINNET_MINT || 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
         }
       };
     }
@@ -169,8 +173,16 @@ import {
           })
         );
       } else {
+        console.log('Token:', token);
         const mintAddress = new PublicKey(networkConfig.tokenMints[token]);
-        const tokenAmount = Math.floor(amount * Math.pow(10, 9));
+        // Per-token decimals (default 9 for SPL, 6 for USDC)
+        const tokenDecimalsMap = {
+          BeTyche: 9,
+          RADBRO: 9,
+          USDC: 6
+        };
+        const decimals = tokenDecimalsMap[token] ?? 9;
+        const tokenAmount = Math.floor(amount * Math.pow(10, decimals));
         console.log('  Token Amount:', tokenAmount);
         console.log('  Mint Address:', mintAddress.toString());
         

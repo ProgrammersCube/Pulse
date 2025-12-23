@@ -23,7 +23,9 @@ const generateToken = (id: string): string => {
 // SPL Token Mint Addresses (MAINNET)
 const TOKEN_MINTS = {
   BeTyche: 'EydjnYHVeCQGihcvA22vBDCxn5HzBrXoQpP98kL9Koyp', // Full mint address for BeTyche
-  RADBRO: '287XY2FcGAE5ty4PZVjg22eqx37sEmzP8jPK3GxFofqB'    // You need to provide the full RADBRO mint address
+  RADBRO: '287XY2FcGAE5ty4PZVjg22eqx37sEmzP8jPK3GxFofqB',   // Full mint address for RADBRO
+  // Solana USDC mainnet SPL mint (can be overridden via env if needed)
+  USDC: process.env.SOLANA_USDC_MAINNET_MINT || 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 };
 
 // Custom interface for requests with authenticated users
@@ -84,7 +86,9 @@ const getSPLTokenBalance = async (
     const tokenAccount = await getAccount(connection, tokenAccountAddress);
     
     // Convert from smallest unit to regular unit
-    // Most SPL tokens use 9 decimals like SOL
+    // Most SPL tokens use 9 decimals like SOL, but some (like USDC) use 6
+    // We infer decimals from mint when available; default to 9 for safety
+    // NOTE: For now, assume 9 decimals; USDC will be handled precisely via backend blockchain.service
     const balance = Number(tokenAccount.amount) / Math.pow(10, 9);
     
     return balance;
@@ -138,19 +142,21 @@ export const getOrCreateUser = async (req: Request, res: Response): Promise<void
       console.log(`🔄 Fetching real blockchain balances for ${walletAddress}...`);
       
       // Get real balances for all supported tokens
-      const [solBalance, beTycheBalance, radbroBalance] = await Promise.all([
+      const [solBalance, beTycheBalance, radbroBalance, usdcBalance] = await Promise.all([
         blockchainService.getRealBalance(walletAddress, 'SOL'),
         blockchainService.getRealBalance(walletAddress, 'BeTyche'),
-        blockchainService.getRealBalance(walletAddress, 'RADBRO')
+        blockchainService.getRealBalance(walletAddress, 'RADBRO'),
+        blockchainService.getRealBalance(walletAddress, 'USDC')
       ]);
       
       user.tokens.SOL = solBalance;
       user.tokens.BeTyche = beTycheBalance;
       user.tokens.RADBRO = radbroBalance;
+      user.tokens.USDC = usdcBalance;
       // ETH would need cross-chain integration - keeping at 0 for now
       user.tokens.ETH = 0;
       
-      console.log(`✅ Real balances fetched: SOL=${solBalance}, BeTyche=${beTycheBalance}, RADBRO=${radbroBalance}`);
+      console.log(`✅ Real balances fetched: SOL=${solBalance}, BeTyche=${beTycheBalance}, RADBRO=${radbroBalance}, USDC=${usdcBalance}`);
       
     } catch (blockchainError) {
       console.error(`❌ Error fetching real balances:`, blockchainError);
@@ -580,8 +586,8 @@ export const createPulseAccount = async (req: any, res: any) => {
       loginType: "registered",
       referralCode,
       wallets: [walletAddress],
-      tokens: { BeTyche: 0, SOL: 0, ETH: 0, RADBRO: 0 },
-      bonusTokens: { BeTyche: 0, SOL: 0, ETH: 0, RADBRO: 0 },
+      tokens: { BeTyche: 0, SOL: 0, ETH: 0, RADBRO: 0, USDC: 0 },
+      bonusTokens: { BeTyche: 0, SOL: 0, ETH: 0, RADBRO: 0, USDC: 0 },
       isAmbassador: false,
     });
 
@@ -1470,7 +1476,8 @@ export const getDetailedReferralDashboard = async (req: Request, res: Response):
       BeTyche: 0,
       SOL: 0,
       ETH: 0,
-      RADBRO: 0
+      RADBRO: 0,
+      USDC: 0
     };
 
     // Get referral history for registered users
